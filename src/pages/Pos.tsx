@@ -9,14 +9,13 @@ import {
   QrCode,
   Search,
   ShoppingBag,
-  Trash2,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import CartDock from '../components/CartDock'
 import EmptyState from '../components/EmptyState'
 import { imageUrl } from '../lib/image'
 import { errText } from '../lib/errors'
@@ -161,7 +160,10 @@ export default function Pos() {
 
   async function clearCart() {
     const ok = await confirm({ title: 'Kosongkan keranjang?', message: 'Semua barang di keranjang akan dihapus.', confirmText: 'Ya, kosongkan', tone: 'danger' })
-    if (ok) setCart({})
+    if (ok) {
+      setCart({})
+      setSheet(false)
+    }
   }
 
   async function copy(text: string) {
@@ -204,6 +206,105 @@ export default function Pos() {
   const quick = [...new Set([total, 20000, 50000, 100000])].filter((n) => n >= total && n > 0)
   const transfers = accounts.filter((a) => a.type === 'transfer')
   const qrisList = accounts.filter((a) => a.type === 'qris')
+
+  const cartBody = (
+    <>
+      {lines.map(({ it, q }) => {
+        const img = products.get(it.product_id)?.image_path
+        return (
+          <div className="cl" key={it.batch_id}>
+            {img ? <img className="cl-img" src={imageUrl(img)} alt="" /> : <div className="cl-img" />}
+            <div style={{ minWidth: 0 }}>
+              <div className="cl-name">{nameOf(it.product_id)}</div>
+              <div className="page-sub">{suppliers.get(it.supplier_id) ?? '-'} · {rupiah(it.sell_price)}</div>
+              <div className="stepper">
+                <button onClick={() => setQty(it.batch_id, q - 1)} aria-label="Kurangi"><Minus size={14} /></button>
+                <b>{q}</b>
+                <button onClick={() => setQty(it.batch_id, q + 1)} disabled={q >= it.qty_remaining} aria-label="Tambah"><Plus size={14} /></button>
+              </div>
+            </div>
+            <div className="cl-end"><b>{rupiah(q * it.sell_price)}</b></div>
+          </div>
+        )
+      })}
+
+      <div className="pay-section">
+        <div className="seg">
+          {METHODS.map((m) => (
+            <button key={m.value} type="button" className={method === m.value ? 'on' : ''} onClick={() => setMethod(m.value)}>
+              <m.icon size={16} /> {m.label}
+            </button>
+          ))}
+        </div>
+
+        {method === 'tunai' && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label className="field">
+              <span>Uang diterima (Rp)</span>
+              <input type="number" min={0} inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />
+            </label>
+            <div className="chips">
+              {quick.map((n, i) => (
+                <button key={n} className="btn-sm" onClick={() => setCash(String(n))}>
+                  {i === 0 && n === total ? 'Uang pas' : rupiah(n)}
+                </button>
+              ))}
+            </div>
+            <div className={`change${cash.trim() !== '' && received < total ? ' bad' : ''}`}>
+              <span>Kembalian</span>
+              <span>{cash.trim() === '' ? '-' : received >= total ? rupiah(received - total) : 'Uang kurang'}</span>
+            </div>
+          </div>
+        )}
+
+        {method === 'transfer' && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {transfers.map((a) => (
+              <div key={a.id} className="acct">
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{a.name}</div>
+                  <div className="acct-no">{a.account_number}</div>
+                  <div className="page-sub">a.n. {a.account_holder}</div>
+                </div>
+                <button className="btn-sm btn-icon" onClick={() => void copy(a.account_number ?? '')}>
+                  <Copy size={15} /> Salin
+                </button>
+              </div>
+            ))}
+            {transfers.length === 0 && (
+              <div className="notice notice-warning">Belum ada rekening. Minta admin menambahkannya di menu Pembayaran.</div>
+            )}
+          </div>
+        )}
+
+        {method === 'qris' && (
+          <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
+            {qrisList.map((a) => (
+              <div key={a.id} style={{ textAlign: 'center', width: '100%' }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{a.name}</div>
+                {a.image_path && <img className="qris-img" src={imageUrl(a.image_path, 'payment-images')} alt={a.name} />}
+              </div>
+            ))}
+            {qrisList.length === 0 && (
+              <div className="notice notice-warning">Belum ada QRIS. Minta admin mengunggahnya di menu Pembayaran.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  )
+
+  const cartFoot = (
+    <>
+      <div className="total-row">
+        <span>Total</span>
+        <strong>{rupiah(total)}</strong>
+      </div>
+      <button className="btn-primary pay-btn" onClick={() => void pay()} disabled={busy || lines.length === 0}>
+        {busy ? 'Memproses…' : `Bayar ${rupiah(total)}`}
+      </button>
+    </>
+  )
 
   return (
     <div className="pos">
@@ -266,140 +367,24 @@ export default function Pos() {
         )}
       </div>
 
-      {sheet && <div className="cart-scrim" onClick={() => setSheet(false)} />}
-
-      <aside className={`cart${sheet ? ' open' : ''}`} aria-label="Keranjang">
-        <div className="cart-head">
-          <div>
-            <h2 style={{ margin: 0 }}>Keranjang</h2>
-            <div className="page-sub">{count} barang</div>
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {lines.length > 0 && (
-              <button className="btn-ghost btn-sm btn-icon" onClick={() => void clearCart()}>
-                <Trash2 size={15} /> Kosongkan
-              </button>
-            )}
-            <button className="icon-btn cart-close" onClick={() => setSheet(false)} aria-label="Tutup keranjang">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div className="cart-lines">
-          {lines.length === 0 ? (
-            <div className="empty" style={{ padding: '28px 8px', display: 'grid', justifyItems: 'center', gap: 8 }}>
-              <ShoppingBag size={30} />
-              <span>Belum ada barang. Ketuk produk untuk menambahkan.</span>
-            </div>
-          ) : (
-            lines.map(({ it, q }) => {
-              const img = products.get(it.product_id)?.image_path
-              return (
-                <div className="cl" key={it.batch_id}>
-                  {img ? <img className="cl-img" src={imageUrl(img)} alt="" /> : <div className="cl-img" />}
-                  <div style={{ minWidth: 0 }}>
-                    <div className="cl-name">{nameOf(it.product_id)}</div>
-                    <div className="page-sub">{suppliers.get(it.supplier_id) ?? '-'} · {rupiah(it.sell_price)}</div>
-                    <div className="stepper">
-                      <button onClick={() => setQty(it.batch_id, q - 1)} aria-label="Kurangi"><Minus size={14} /></button>
-                      <b>{q}</b>
-                      <button onClick={() => setQty(it.batch_id, q + 1)} disabled={q >= it.qty_remaining} aria-label="Tambah"><Plus size={14} /></button>
-                    </div>
-                  </div>
-                  <div className="cl-end">
-                    <b>{rupiah(q * it.sell_price)}</b>
-                    <button className="icon-btn" style={{ minHeight: 32, minWidth: 32 }} onClick={() => setQty(it.batch_id, 0)} aria-label="Hapus dari keranjang">
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-
-        <div className="cart-pay">
-          <div className="total-row">
-            <span>Total</span>
+      <CartDock
+        title="Keranjang"
+        subtitle={`${count} barang`}
+        hasItems={lines.length > 0}
+        emptyText="Belum ada barang. Ketuk produk untuk menambahkan."
+        open={sheet}
+        onOpenChange={setSheet}
+        onClear={() => void clearCart()}
+        bar={
+          <>
+            <span><ShoppingBag size={18} /> {count} barang</span>
             <strong>{rupiah(total)}</strong>
-          </div>
-
-          <div className="seg">
-            {METHODS.map((m) => (
-              <button key={m.value} type="button" className={method === m.value ? 'on' : ''} onClick={() => setMethod(m.value)}>
-                <m.icon size={16} /> {m.label}
-              </button>
-            ))}
-          </div>
-
-          {method === 'tunai' && (
-            <div style={{ display: 'grid', gap: 10 }}>
-              <label className="field">
-                <span>Uang diterima (Rp)</span>
-                <input type="number" min={0} inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />
-              </label>
-              <div className="chips">
-                {quick.map((n, i) => (
-                  <button key={n} className="btn-sm" onClick={() => setCash(String(n))}>
-                    {i === 0 && n === total ? 'Uang pas' : rupiah(n)}
-                  </button>
-                ))}
-              </div>
-              <div className={`change${cash.trim() !== '' && received < total ? ' bad' : ''}`}>
-                <span>Kembalian</span>
-                <span>{cash.trim() === '' ? '-' : received >= total ? rupiah(received - total) : 'Uang kurang'}</span>
-              </div>
-            </div>
-          )}
-
-          {method === 'transfer' && (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {transfers.map((a) => (
-                <div key={a.id} className="acct">
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700 }}>{a.name}</div>
-                    <div className="acct-no">{a.account_number}</div>
-                    <div className="page-sub">a.n. {a.account_holder}</div>
-                  </div>
-                  <button className="btn-sm btn-icon" onClick={() => void copy(a.account_number ?? '')}>
-                    <Copy size={15} /> Salin
-                  </button>
-                </div>
-              ))}
-              {transfers.length === 0 && (
-                <div className="notice notice-warning">Belum ada rekening. Minta admin menambahkannya di menu Pembayaran.</div>
-              )}
-            </div>
-          )}
-
-          {method === 'qris' && (
-            <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
-              {qrisList.map((a) => (
-                <div key={a.id} style={{ textAlign: 'center', width: '100%' }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{a.name}</div>
-                  {a.image_path && <img className="qris-img" src={imageUrl(a.image_path, 'payment-images')} alt={a.name} />}
-                </div>
-              ))}
-              {qrisList.length === 0 && (
-                <div className="notice notice-warning">Belum ada QRIS. Minta admin mengunggahnya di menu Pembayaran.</div>
-              )}
-            </div>
-          )}
-
-          <button className="btn-primary pay-btn" onClick={() => void pay()} disabled={busy || lines.length === 0}>
-            {busy ? 'Memproses…' : `Bayar ${rupiah(total)}`}
-          </button>
-        </div>
-      </aside>
-
-      {count > 0 && !sheet && (
-        <button type="button" className="cart-bar" onClick={() => setSheet(true)}>
-          <span><ShoppingBag size={18} /> {count} barang</span>
-          <strong>{rupiah(total)}</strong>
-          <span>Lihat keranjang</span>
-        </button>
-      )}
+            <span>Lihat keranjang</span>
+          </>
+        }
+        body={cartBody}
+        foot={cartFoot}
+      />
 
       {done && (
         <Modal

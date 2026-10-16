@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, PackagePlus, Plus, Search, Trash2, X } from 'lucide-react'
+import { Check, PackagePlus, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import NewProductModal from '../components/NewProductModal'
+import CartDock from '../components/CartDock'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
 import { rupiah } from '../lib/format'
@@ -157,7 +158,10 @@ export default function StockIntake() {
 
   async function clearEntries() {
     const ok = await confirm({ title: 'Kosongkan daftar?', message: 'Semua produk yang dipilih akan dihapus dari daftar.', confirmText: 'Ya, kosongkan', tone: 'danger' })
-    if (ok) setEntries([])
+    if (ok) {
+      setEntries([])
+      setSheet(false)
+    }
   }
 
   function validate(): string {
@@ -218,6 +222,68 @@ export default function StockIntake() {
     setSheet(false)
     await loadHistory(supplierId)
   }
+
+  const dockBody = entries.map((e) => {
+    const p = productById.get(e.productId)
+    if (!p) return null
+    const h = history.get(e.productId)
+    const cost = Number(e.cost)
+    const sell = Number(e.sell)
+    const hasPrices = e.cost !== '' && e.sell !== ''
+    const margin = sell - cost
+    const changed = !!h && hasPrices && (cost !== h.cost || sell !== h.sell)
+    return (
+      <div className="entry" key={e.productId}>
+        <div className="entry-top">
+          {p.image_path ? <img className="cl-img" src={imageUrl(p.image_path)} alt="" /> : <div className="cl-img" />}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="cl-name">{p.name}</div>
+            <div className="page-sub">{h ? `Terakhir: ${rupiah(h.cost)} / ${rupiah(h.sell)}` : 'Belum pernah dititip supplier ini'}</div>
+          </div>
+          <button className="icon-btn" style={{ minHeight: 34, minWidth: 34 }} onClick={() => toggle(p)} aria-label={`Hapus ${p.name} dari daftar`}>
+            <Trash2 size={16} />
+          </button>
+        </div>
+        <div className="entry-fields">
+          <label>
+            Stok
+            <input type="number" min={1} inputMode="numeric" value={e.qty} onChange={(ev) => patch(e.productId, 'qty', ev.target.value)} />
+          </label>
+          <label>
+            Harga supplier
+            <input type="number" min={0} inputMode="numeric" value={e.cost} onChange={(ev) => patch(e.productId, 'cost', ev.target.value)} />
+          </label>
+          <label>
+            Harga jual
+            <input type="number" min={0} inputMode="numeric" value={e.sell} onChange={(ev) => patch(e.productId, 'sell', ev.target.value)} />
+          </label>
+        </div>
+        {hasPrices && (
+          <span className={`hint${margin < 0 ? ' warn' : ''}`}>
+            {margin < 0 ? `Rugi ${rupiah(-margin)} per pcs` : `Untung ${rupiah(margin)} per pcs${sell > 0 ? ` (${Math.round((margin / sell) * 100)}%)` : ''}`}
+          </span>
+        )}
+        {changed && h && <span className="hint warn">Berbeda dari harga terakhir ({rupiah(h.cost)} / {rupiah(h.sell)})</span>}
+      </div>
+    )
+  })
+
+  const dockFoot = (
+    <>
+      <div>
+        <div className="sum-row"><span>Total barang</span><b>{totals.qty}</b></div>
+        <div className="sum-row"><span>Nilai supplier</span><b>{rupiah(totals.cost)}</b></div>
+        <div className="sum-row"><span>Potensi omzet</span><b>{rupiah(totals.sell)}</b></div>
+        <div className="sum-row total">
+          <span>Potensi laba</span>
+          <span style={{ color: totals.sell - totals.cost < 0 ? 'var(--danger)' : 'var(--success)' }}>{rupiah(totals.sell - totals.cost)}</span>
+        </div>
+      </div>
+      <button className="btn-primary pay-btn" onClick={() => void save()} disabled={busy || entries.length === 0}>
+        {busy ? 'Menyimpan…' : 'Simpan barang masuk'}
+      </button>
+    </>
+  )
 
   return (
     <div>
@@ -313,100 +379,24 @@ export default function StockIntake() {
             )}
           </div>
 
-          {sheet && <div className="cart-scrim" onClick={() => setSheet(false)} />}
-
-          <aside className={`cart${sheet ? ' open' : ''}`} aria-label="Daftar barang masuk">
-            <div className="cart-head">
-              <div>
-                <h2 style={{ margin: 0 }}>Barang masuk</h2>
-                <div className="page-sub">{entries.length} produk · {totals.qty} barang</div>
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {entries.length > 0 && (
-                  <button className="btn-ghost btn-sm btn-icon" onClick={() => void clearEntries()}>
-                    <Trash2 size={15} /> Kosongkan
-                  </button>
-                )}
-                <button className="icon-btn cart-close" onClick={() => setSheet(false)} aria-label="Tutup daftar">
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="cart-lines">
-              {entries.length === 0 ? (
-                <div className="empty" style={{ padding: '28px 8px' }}>Ketuk produk di katalog untuk menambahkannya ke daftar ini.</div>
-              ) : (
-                entries.map((e) => {
-                  const p = productById.get(e.productId)
-                  if (!p) return null
-                  const h = history.get(e.productId)
-                  const cost = Number(e.cost)
-                  const sell = Number(e.sell)
-                  const hasPrices = e.cost !== '' && e.sell !== ''
-                  const margin = sell - cost
-                  const changed = !!h && hasPrices && (cost !== h.cost || sell !== h.sell)
-                  return (
-                    <div className="entry" key={e.productId}>
-                      <div className="entry-top">
-                        {p.image_path ? <img className="cl-img" src={imageUrl(p.image_path)} alt="" /> : <div className="cl-img" />}
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div className="cl-name">{p.name}</div>
-                          <div className="page-sub">{h ? `Terakhir: ${rupiah(h.cost)} / ${rupiah(h.sell)}` : 'Belum pernah dititip supplier ini'}</div>
-                        </div>
-                        <button className="icon-btn" style={{ minHeight: 34, minWidth: 34 }} onClick={() => toggle(p)} aria-label={`Hapus ${p.name} dari daftar`}>
-                          <X size={16} />
-                        </button>
-                      </div>
-                      <div className="entry-fields">
-                        <label>
-                          Stok
-                          <input type="number" min={1} inputMode="numeric" value={e.qty} onChange={(ev) => patch(e.productId, 'qty', ev.target.value)} />
-                        </label>
-                        <label>
-                          Harga supplier
-                          <input type="number" min={0} inputMode="numeric" value={e.cost} onChange={(ev) => patch(e.productId, 'cost', ev.target.value)} />
-                        </label>
-                        <label>
-                          Harga jual
-                          <input type="number" min={0} inputMode="numeric" value={e.sell} onChange={(ev) => patch(e.productId, 'sell', ev.target.value)} />
-                        </label>
-                      </div>
-                      {hasPrices && (
-                        <span className={`hint${margin < 0 ? ' warn' : ''}`}>
-                          {margin < 0 ? `Rugi ${rupiah(-margin)} per pcs` : `Untung ${rupiah(margin)} per pcs${sell > 0 ? ` (${Math.round((margin / sell) * 100)}%)` : ''}`}
-                        </span>
-                      )}
-                      {changed && h && <span className="hint warn">Berbeda dari harga terakhir ({rupiah(h.cost)} / {rupiah(h.sell)})</span>}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            <div className="cart-pay">
-              <div>
-                <div className="sum-row"><span>Total barang</span><b>{totals.qty}</b></div>
-                <div className="sum-row"><span>Nilai supplier</span><b>{rupiah(totals.cost)}</b></div>
-                <div className="sum-row"><span>Potensi omzet</span><b>{rupiah(totals.sell)}</b></div>
-                <div className="sum-row total">
-                  <span>Potensi laba</span>
-                  <span style={{ color: totals.sell - totals.cost < 0 ? 'var(--danger)' : 'var(--success)' }}>{rupiah(totals.sell - totals.cost)}</span>
-                </div>
-              </div>
-              <button className="btn-primary pay-btn" onClick={() => void save()} disabled={busy || entries.length === 0}>
-                {busy ? 'Menyimpan…' : 'Simpan barang masuk'}
-              </button>
-            </div>
-          </aside>
-
-          {entries.length > 0 && !sheet && (
-            <button type="button" className="cart-bar" onClick={() => setSheet(true)}>
-              <span><PackagePlus size={18} /> {entries.length} produk</span>
-              <strong>{totals.qty} barang</strong>
-              <span>Isi stok &amp; harga</span>
-            </button>
-          )}
+          <CartDock
+            title="Barang masuk"
+            subtitle={`${entries.length} produk · ${totals.qty} barang`}
+            hasItems={entries.length > 0}
+            emptyText="Ketuk produk di katalog untuk menambahkannya ke daftar ini."
+            open={sheet}
+            onOpenChange={setSheet}
+            onClear={() => void clearEntries()}
+            bar={
+              <>
+                <span><PackagePlus size={18} /> {entries.length} produk</span>
+                <strong>{totals.qty} barang</strong>
+                <span>Isi stok &amp; harga</span>
+              </>
+            }
+            body={dockBody}
+            foot={dockFoot}
+          />
         </div>
       )}
 

@@ -735,3 +735,22 @@ img.upload-preview { border-style: solid; }
 .entry-fields label { display: grid; gap: 4px; font-size: 0.7rem; font-weight: 700; color: var(--muted); }
 .entry-fields input { width: 100%; min-height: 40px; padding: 6px 8px; font-size: 0.95rem; }
 .entry .hint { display: block; }
+
+/* ============ Perbaikan panel keranjang & lembar bawah (mobile) ============ */
+.dialog-scrim { z-index: 90; }
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-end;
+  background: rgba(8, 16, 12, 0.5); animation: fadeIn 0.2s ease both;
+}
+.sheet {
+  width: 100%; max-height: 92dvh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-md);
+  padding-bottom: env(safe-area-inset-bottom); animation: sheetUp 0.28s var(--ease) both;
+}
+.cart-head-actions { display: flex; align-items: center; gap: 4px; }
+.cart-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; padding: 0 16px 8px;
+}
+.cart-foot { display: grid; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+.pay-section { display: grid; gap: 12px; padding: 12px 0 4px; }

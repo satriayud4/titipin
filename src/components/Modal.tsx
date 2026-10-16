@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { lockScroll } from '../lib/scrollLock'
 
-const stack: object[] = [] // modal paling atas yang menanggapi tombol Esc
+const stack: object[] = [] // jendela paling atas yang menanggapi tombol Esc
 
 interface Props {
   title: string
@@ -25,17 +26,16 @@ export default function Modal({ title, onClose, children, footer, size = 'md' }:
       if (e.key === 'Escape' && stack[stack.length - 1] === id) closeRef.current()
     }
     window.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockScroll()
     return () => {
       window.removeEventListener('keydown', onKey)
       stack.splice(stack.indexOf(id), 1)
-      document.body.style.overflow = prev
+      unlock()
     }
   }, [])
 
   return createPortal(
-    <div className="dialog-scrim" onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
+    <div className="dialog-scrim" onPointerDown={(e) => e.target === e.currentTarget && closeRef.current()}>
       <div className={`dialog dialog-${size}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="dialog-head">
           <h2>{title}</h2>
