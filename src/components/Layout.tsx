@@ -40,11 +40,13 @@ export default function Layout() {
     <div className="app">
       <aside className={`sidebar${open ? ' open' : ''}`} aria-label="Menu utama">
         <div className="brand">
-          <BrandMark size={22} />
-          <span className="brand-text">
-            <span className="brand-name">{store.name}</span>
-            {store.tagline && <span className="brand-sub">{store.tagline}</span>}
-          </span>
+          <Link to="/" className="brand-link" onClick={close} aria-label={`Ke dashboard ${store.name}`}>
+            <BrandMark size={22} />
+            <span className="brand-text">
+              <span className="brand-name">{store.name}</span>
+              {store.tagline && <span className="brand-sub">{store.tagline}</span>}
+            </span>
+          </Link>
           <button type="button" className="icon-btn drawer-close" onClick={close} aria-label="Tutup menu">
             <X size={20} />
           </button>
@@ -73,10 +75,10 @@ export default function Layout() {
 
       <div className="content">
         <header className="header">
-          <div className="brand-mini">
+          <Link to="/" className="brand-mini" aria-label={`Ke dashboard ${store.name}`}>
             <BrandMark size={18} />
             <span className="brand-name">{store.name}</span>
-          </div>
+          </Link>
           <button type="button" className="search-btn" onClick={() => setPaletteOpen(true)} aria-label="Cari halaman">
             <Search size={18} />
             <span className="search-text">Cari halaman…</span>
