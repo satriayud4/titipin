@@ -79,7 +79,7 @@ function Kpi({ tone, icon: Icon, label, value, loading, children }: { tone: Tone
       </div>
       <div className="kpi-value">{loading ? <div className="skeleton" style={{ height: 26, width: '70%' }} /> : value}</div>
       <div className="kpi-sub">{loading ? <div className="skeleton" style={{ height: 12, width: '50%' }} /> : children}</div>
-      <Icon className="kpi-deco" size={88} />
+      <Icon className={`kpi-deco deco-${tone}`} size={72} />
     </div>
   )
 }

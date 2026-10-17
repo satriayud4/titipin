@@ -781,3 +781,71 @@ input[type='file'] { width: 100%; min-width: 0; }
   --shadow-sm: 0 1px 2px rgba(16, 40, 30, 0.1), 0 2px 6px rgba(16, 40, 30, 0.06);
   --shadow-md: 0 14px 32px rgba(16, 40, 30, 0.16);
 }
+
+/* ============ Mode terang: HP seperti contoh, PC diberi penguat kontras ============ */
+:root {
+  /* nilai dasar = tampilan HP pada tangkapan layar */
+  --bg: #e8eeeb;
+  --surface: #ffffff;
+  --surface-2: #f1f5f3;
+  --border: #cdd8d2;
+  --border-soft: #e1e8e4;
+  --text: #13202b;
+  --muted: #566274;
+  --primary: #087f58;
+  --primary-hover: #066a49;
+  --primary-soft: #e3f5ed;
+  --success: #15803d;
+  --success-soft: #e1f5e9;
+  --warning: #b45309;
+  --warning-soft: #fef0d9;
+  --danger: #d92d20;
+  --danger-soft: #fde8e6;
+  --info: #2563eb;
+  --info-soft: #e5edfd;
+  --purple: #6d5bd0;
+  --purple-soft: #eeebfd;
+  --shadow-sm: 0 1px 2px rgba(16, 40, 30, 0.1), 0 2px 6px rgba(16, 40, 30, 0.06);
+  --shadow-md: 0 14px 32px rgba(16, 40, 30, 0.16);
+}
+
+/* ikon dekorasi kartu statistik: abu-abu tebal, terpotong di pojok (seperti di HP) */
+.kpi-deco { right: -8px; bottom: -10px; width: 88px; height: 88px; opacity: 0.09; stroke-width: 2; color: var(--text); }
+:root[data-theme='dark'] .kpi-deco { opacity: 0.12; }
+
+/* PC: penguat kontras (hanya mode terang, mode gelap tidak terpengaruh) */
+@media (min-width: 900px) {
+  :root {
+    --bg: #dde6e1;
+    --surface-2: #edf2ef;
+    --border: #b3c3ba;
+    --border-soft: #d3ddd8;
+    --text: #0b1620;
+    --muted: #3f4d5f;
+    --primary: #06704b;
+    --primary-hover: #04573a;
+    --primary-soft: #d4efe2;
+    --success: #11703a;
+    --success-soft: #d3eedd;
+    --warning: #9a4a00;
+    --warning-soft: #fde7bd;
+    --danger: #c5281c;
+    --danger-soft: #fbd8d3;
+    --info: #1d4ed8;
+    --info-soft: #dbe6fd;
+    --purple: #5b47c7;
+    --purple-soft: #e4defb;
+    --shadow-sm: 0 1px 2px rgba(10, 30, 22, 0.16), 0 4px 10px rgba(10, 30, 22, 0.1);
+    --shadow-md: 0 18px 40px rgba(10, 30, 22, 0.22);
+  }
+  .kpi-deco { opacity: 0.25; }
+  .sidebar { box-shadow: 1px 0 0 var(--border), 4px 0 16px rgba(10, 30, 22, 0.05); }
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']), select, textarea) {
+    box-shadow: inset 0 1px 2px rgba(10, 30, 22, 0.08);
+  }
+}
+.deco-green { color: var(--primary); }
+.deco-purple { color: var(--purple); }
+.deco-orange { color: var(--warning); }
+.deco-blue { color: var(--info); }
+.deco-red { color: var(--danger); }
