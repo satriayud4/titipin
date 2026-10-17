@@ -867,3 +867,37 @@ input[type='file'] { width: 100%; min-width: 0; }
 .irow.gone { opacity: 0.5; }
 .irow.gone .iname { text-decoration: line-through; }
 .audit { padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
+
+/* ============ Perbaikan toast agar tidak keluar layar ============ */
+.toast-stack {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+.toast {
+  width: fit-content;
+  min-width: 0;
+  max-width: min(100%, 460px);
+}
+.toast > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* kotak pemberitahuan di dalam jendela (rincian, ubah, batal) */
+.notice { min-width: 0; max-width: 100%; }
+.notice > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* ============ Popover notifikasi & menu pengguna: tidak keluar layar di HP ============ */
+@media (max-width: 599px) {
+  .pop-wrap { position: static; }
+  .popover {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    top: calc(100% + 8px);
+    max-height: calc(100dvh - 90px);
+    overflow-y: auto;
+    transform-origin: top center;
+  }
+}
