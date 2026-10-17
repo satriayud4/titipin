@@ -29,22 +29,25 @@
     <style>
       html { background: #e8eeeb; }
       html[data-theme='dark'] { background: #0c1411; }
-      #boot {
-        position: fixed; inset: 0; display: grid; place-items: center;
-        background: #e8eeeb;
+      /* layar pembuka: aturan yang sama juga ada di src/index.css (dipakai React) */
+      .boot {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: #e8eeeb; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
       }
-      html[data-theme='dark'] #boot { background: #0c1411; }
-      #boot b {
-        display: grid; place-items: center; width: 84px; height: 84px; border-radius: 22px;
-        background: #087f58; color: #fff; font: 800 44px/1 system-ui, sans-serif;
-        animation: bootPulse 1.4s ease-in-out infinite;
+      html[data-theme='dark'] .boot { background: #0c1411; }
+      .boot b {
+        display: grid; place-items: center; width: 96px; height: 96px; border-radius: 24px;
+        background: #087f58; color: #fff; font: 800 52px/1 'Plus Jakarta Sans', system-ui, sans-serif;
       }
-      html[data-theme='dark'] #boot b { background: #34d399; color: #05261b; }
-      @keyframes bootPulse { 50% { transform: scale(1.08); } }
+      html[data-theme='dark'] .boot b { background: #34d399; color: #05261b; }
+      .boot strong { font-size: 1.25rem; font-weight: 800; letter-spacing: 0.06em; color: #13202b; }
+      html[data-theme='dark'] .boot strong { color: #e8f1ed; }
+      .boot span { font-size: 0.9rem; font-weight: 500; color: #566274; }
+      html[data-theme='dark'] .boot span { color: #93a69e; }
     </style>
   </head>
   <body>
-    <div id="root"><div id="boot"><b>S</b></div></div>
+    <div id="root"><div class="boot"><b>S</b><strong>SARAGA</strong><span>Memuat…</span></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

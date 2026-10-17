@@ -901,3 +901,19 @@ input[type='file'] { width: 100%; min-width: 0; }
     transform-origin: top center;
   }
 }
+
+/* ============ Layar loading awal (sama dengan yang di index.html) ============ */
+.boot {
+  position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: #e8eeeb; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+:root[data-theme='dark'] .boot { background: #0c1411; }
+.boot b {
+  display: grid; place-items: center; width: 96px; height: 96px; border-radius: 24px;
+  background: #087f58; color: #fff; font: 800 52px/1 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+:root[data-theme='dark'] .boot b { background: #34d399; color: #05261b; }
+.boot strong { font-size: 1.25rem; font-weight: 800; letter-spacing: 0.06em; color: #13202b; }
+:root[data-theme='dark'] .boot strong { color: #e8f1ed; }
+.boot span { font-size: 0.9rem; font-weight: 500; color: #566274; }
+:root[data-theme='dark'] .boot span { color: #93a69e; }
