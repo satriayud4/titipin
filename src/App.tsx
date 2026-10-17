@@ -17,6 +17,7 @@ import Laporan from './pages/Laporan'
 import PaymentSettings from './pages/PaymentSettings'
 import Pengguna from './pages/Pengguna'
 import PengaturanToko from './pages/PengaturanToko'
+import Riwayat from './pages/Riwayat'
 import { CategoriesPage, ProductsPage, SuppliersPage } from './pages/MasterData'
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
                   <Route path="/produk" element={<ProductsPage />} />
                   <Route path="/kategori" element={<CategoriesPage />} />
                   <Route path="/supplier" element={<SuppliersPage />} />
+                  <Route path="/riwayat" element={<Riwayat />} />
                   <Route path="/pembayaran" element={<ProtectedRoute roles={['admin']}><PaymentSettings /></ProtectedRoute>} />
                   <Route path="/pengguna" element={<ProtectedRoute superOnly><Pengguna /></ProtectedRoute>} />
                   <Route path="/pengaturan" element={<ProtectedRoute superOnly><PengaturanToko /></ProtectedRoute>} />

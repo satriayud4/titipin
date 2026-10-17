@@ -849,3 +849,21 @@ input[type='file'] { width: 100%; min-width: 0; }
 .deco-orange { color: var(--warning); }
 .deco-blue { color: var(--info); }
 .deco-red { color: var(--danger); }
+
+/* ============ Riwayat transaksi ============ */
+.trx {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 14px;
+  width: 100%; min-height: 0; padding: 12px 14px; text-align: left; font-weight: 400;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm);
+  transition: transform 0.15s var(--ease), box-shadow 0.15s, border-color 0.15s;
+}
+.trx:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-md); background: var(--surface); border-color: var(--primary); }
+.trx.void { opacity: 0.7; }
+.trx-main { flex: 1 1 170px; min-width: 0; }
+.trx-end { display: grid; justify-items: end; gap: 4px; text-align: right; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 20px 0 8px; }
+.day-head h2 { margin: 0; font-size: 1rem; }
+.irow { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
+.irow.gone { opacity: 0.5; }
+.irow.gone .iname { text-decoration: line-through; }
+.audit { padding: 9px 0; border-bottom: 1px solid var(--border-soft); }

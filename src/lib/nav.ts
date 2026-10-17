@@ -12,6 +12,7 @@ import {
   Truck,
   Undo2,
   Users,
+  ReceiptText,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../auth/AuthContext'
@@ -33,6 +34,7 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/kasir', label: 'Kasir', icon: ShoppingCart },
+            { to: '/riwayat', label: 'Riwayat Transaksi', icon: ReceiptText },
     ],
   },
   {

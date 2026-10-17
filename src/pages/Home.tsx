@@ -281,7 +281,7 @@ export default function Home() {
               <h2>Transaksi Terbaru</h2>
               <div className="panel-sub">5 transaksi terakhir</div>
             </div>
-            <Link className="link-more" to="/kasir">Kasir <ChevronRight size={14} /></Link>
+            <Link className="link-more" to="/riwayat">Lihat semua <ChevronRight size={14} /></Link>
           </div>
           {loading ? (
             <div className="skeleton" style={{ height: 180 }} />
