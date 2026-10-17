@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import { imageUrl } from '../lib/image'
+import { useAuth } from '../auth/AuthContext'
+import { APP_BRAND } from '../brand'
 
 interface StoreInfo {
   name: string
@@ -18,6 +20,7 @@ interface StoreCtx {
 
 const FALLBACK = 'Toko Saya'
 const CACHE = 'store-info'
+const EMPTY: StoreInfo = { name: '', tagline: '', logo: '' }
 
 const Ctx = createContext<StoreCtx>({ name: FALLBACK, tagline: '', logoUrl: null, loaded: false, isSet: false, refresh: async () => {} })
 
@@ -31,14 +34,17 @@ function readCache(): StoreInfo {
   } catch {
     /* abaikan */
   }
-  return { name: '', tagline: '', logo: '' }
+  return EMPTY
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth()
+  const userId = session?.user.id
   const [info, setInfo] = useState<StoreInfo>(readCache)
   const [loaded, setLoaded] = useState(false)
 
   const refresh = useCallback(async () => {
+    if (!userId) return
     const { data } = await supabase.from('store_settings').select('name, tagline, logo_path').eq('id', 1).maybeSingle()
     if (data) {
       const v = { name: String(data.name ?? ''), tagline: String(data.tagline ?? ''), logo: String(data.logo_path ?? '') }
@@ -50,16 +56,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     setLoaded(true)
-  }, [])
+  }, [userId])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (loading) return
+    if (userId) {
+      void refresh()
+    } else {
+      setInfo(EMPTY)
+      setLoaded(false)
+      try {
+        localStorage.removeItem(CACHE)
+      } catch {
+        /* abaikan */
+      }
+    }
+  }, [loading, userId, refresh])
 
   const name = info.name.trim() || FALLBACK
   useEffect(() => {
-    document.title = name
-  }, [name])
+    document.title = userId ? name : APP_BRAND
+  }, [userId, name])
 
   return (
     <Ctx.Provider

@@ -21,8 +21,8 @@ import { CategoriesPage, ProductsPage, SuppliersPage } from './pages/MasterData'
 
 export default function App() {
   return (
-    <StoreProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <StoreProvider>
         <ToastProvider>
           <ConfirmProvider>
             <BrowserRouter>
@@ -48,7 +48,7 @@ export default function App() {
             </BrowserRouter>
           </ConfirmProvider>
         </ToastProvider>
-      </AuthProvider>
-    </StoreProvider>
+      </StoreProvider>
+    </AuthProvider>
   )
 }

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth, type Role } from '../auth/AuthContext'
-import { useStore } from '../store/StoreContext'
 import BrandMark from './BrandMark'
 
 interface Props {
@@ -12,13 +11,12 @@ interface Props {
 
 export default function ProtectedRoute({ roles, superOnly, children }: Props) {
   const { session, profile, loading, signOut } = useAuth()
-  const store = useStore()
 
   if (loading) {
     return (
       <div className="splash">
-        <BrandMark />
-        <div className="page-sub">Memuat {store.name}…</div>
+        <BrandMark fixed />
+        <div className="page-sub">Memuat…</div>
       </div>
     )
   }

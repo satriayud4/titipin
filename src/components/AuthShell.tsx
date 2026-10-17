@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
+import { APP_BRAND, APP_BRAND_TAGLINE } from '../brand'
 import BrandMark from './BrandMark'
-import { useStore } from '../store/StoreContext'
 import { ShopScene } from './Illustration'
 import ThemeToggle from './ThemeToggle'
 
@@ -12,17 +12,16 @@ interface Props {
 }
 
 export default function AuthShell({ title, subtitle, children, footer }: Props) {
-  const store = useStore()
   return (
     <div className="auth">
       <div className="auth-form">
         <div className="auth-top"><ThemeToggle /></div>
         <div className="auth-card page">
           <div className="auth-brand">
-            <BrandMark size={22} />
+            <BrandMark fixed size={22} />
             <span className="brand-text">
-              <span className="brand-name">{store.name}</span>
-              {store.tagline && <span className="brand-sub">{store.tagline}</span>}
+              <span className="brand-name">{APP_BRAND}</span>
+              <span className="brand-sub">{APP_BRAND_TAGLINE}</span>
             </span>
           </div>
           <h1>{title}</h1>

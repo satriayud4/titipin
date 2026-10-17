@@ -760,3 +760,24 @@ img.upload-preview { border-style: solid; }
 .brand-link { display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: 12px; transition: opacity 0.15s, transform 0.12s var(--ease); }
 .brand-link:hover, .brand-mini:hover { opacity: 0.85; }
 .brand-link:active, .brand-mini:active { transform: scale(0.98); }
+
+/* ============ Perbaikan: tampilan form di HP & kontras mode terang ============ */
+.form-stack { grid-template-columns: minmax(0, 1fr); }
+.form-stack > *, .field, .upload, .check { min-width: 0; }
+.field input:not([type='checkbox']):not([type='radio']), .field select { width: 100%; min-width: 0; }
+input[type='file'] { width: 100%; min-width: 0; }
+.hint, .page-sub { overflow-wrap: anywhere; }
+.brand-preview { min-width: 0; overflow: hidden; }
+.brand-name, .brand-sub { overflow-wrap: anywhere; }
+
+/* mode terang: latar, garis, dan bayangan dipertegas (mode gelap tidak berubah) */
+:root {
+  --bg: #e8eeeb;
+  --surface: #ffffff;
+  --surface-2: #f1f5f3;
+  --border: #cdd8d2;
+  --border-soft: #e1e8e4;
+  --muted: #566274;
+  --shadow-sm: 0 1px 2px rgba(16, 40, 30, 0.1), 0 2px 6px rgba(16, 40, 30, 0.06);
+  --shadow-md: 0 14px 32px rgba(16, 40, 30, 0.16);
+}
