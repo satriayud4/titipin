@@ -10,7 +10,6 @@
     <meta name="apple-mobile-web-app-title" content="Saraga" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>SARAGA</title>
-    <!-- sisanya (font dan script tema) tetap sama -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -28,12 +27,24 @@
       })();
     </script>
     <style>
-  html { background: #e8eeeb; }
-  html[data-theme='dark'] { background: #0c1411; }
-</style>
+      html { background: #e8eeeb; }
+      html[data-theme='dark'] { background: #0c1411; }
+      #boot {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: #e8eeeb;
+      }
+      html[data-theme='dark'] #boot { background: #0c1411; }
+      #boot b {
+        display: grid; place-items: center; width: 84px; height: 84px; border-radius: 22px;
+        background: #087f58; color: #fff; font: 800 44px/1 system-ui, sans-serif;
+        animation: bootPulse 1.4s ease-in-out infinite;
+      }
+      html[data-theme='dark'] #boot b { background: #34d399; color: #05261b; }
+      @keyframes bootPulse { 50% { transform: scale(1.08); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot"><b>S</b></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
