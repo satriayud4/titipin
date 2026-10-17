@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth, type Role } from '../auth/AuthContext'
-import BrandMark from './BrandMark'
+import BootScreen from './BootScreen'
 
 interface Props {
   roles?: Role[]
@@ -13,12 +13,7 @@ export default function ProtectedRoute({ roles, superOnly, children }: Props) {
   const { session, profile, loading, signOut } = useAuth()
 
   if (loading) {
-    return (
-      <div className="splash">
-        <BrandMark fixed />
-        <div className="page-sub">Memuat…</div>
-      </div>
-    )
+    return <BootScreen />
   }
   if (!session) return <Navigate to="/login" replace />
   if (!profile || !profile.is_active) {
