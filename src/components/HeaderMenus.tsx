@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, ChevronDown, CircleAlert, Info, LogOut, TriangleAlert } from 'lucide-react'
+import { Bell, ChevronDown, CircleAlert, Info, LogOut, TriangleAlert, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import type { AlertItem } from '../lib/alerts'
 import ThemeToggle from './ThemeToggle'
@@ -68,16 +68,29 @@ export function NotificationsMenu({ alerts }: { alerts: AlertItem[] }) {
   )
 }
 
+
 export function UserMenu() {
   const { profile, signOut } = useAuth()
   const { open, setOpen, ref } = usePopover()
+  const navigate = useNavigate()
+
   const name = profile?.full_name || 'Pengguna'
-  const role = profile?.is_superadmin ? 'Superadmin' : profile?.role === 'admin' ? 'Admin' : 'Kasir'
+  const role = profile?.is_superadmin
+    ? 'Superadmin'
+    : profile?.role === 'admin'
+      ? 'Admin'
+      : 'Kasir'
+
   const initial = name.trim().charAt(0).toUpperCase()
 
   return (
     <div className="pop-wrap" ref={ref}>
-      <button type="button" className="user-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        type="button"
+        className="user-btn"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         <span className="avatar">{initial}</span>
         <span className="user-meta">
           <span className="user-name">{name}</span>
@@ -85,15 +98,35 @@ export function UserMenu() {
         </span>
         <ChevronDown size={16} />
       </button>
+
       {open && (
         <div className="popover">
           <div className="popover-head">
             <div className="user-name">{name}</div>
             <div className="user-role">{role}</div>
           </div>
+
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setOpen(false)
+              navigate('/profil')
+            }}
+          >
+            <UserRound size={16} />
+            Profil
+          </button>
+
           <ThemeToggle withLabel />
-          <button type="button" className="btn-ghost" onClick={() => void signOut()}>
-            <LogOut size={16} /> Keluar
+
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => void signOut()}
+          >
+            <LogOut size={16} />
+            Keluar
           </button>
         </div>
       )}

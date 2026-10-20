@@ -255,7 +255,7 @@ tbody tr:hover { background: var(--surface-2); }
   padding: 8px; transform-origin: top right; animation: popIn 0.18s var(--ease) both;
 }
 .popover-title { padding: 8px 10px; font-weight: 800; }
-.popover .btn-ghost { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 8px; }
+.popover .btn-ghost { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; box-sizing: border-box; padding: 8px 10px; line-height: 1.4; font-weight: 600; }
 .popover-head { padding: 8px 10px 10px; border-bottom: 1px solid var(--border-soft); margin-bottom: 6px; }
 .dot-badge {
   position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
@@ -917,3 +917,90 @@ input[type='file'] { width: 100%; min-width: 0; }
 :root[data-theme='dark'] .boot strong { color: #e8f1ed; }
 .boot span { font-size: 0.9rem; font-weight: 500; color: #566274; }
 :root[data-theme='dark'] .boot span { color: #93a69e; }
+
+
+/* Profil akun */
+.profile-page {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 0 32px;
+}
+
+.profile-page .page-heading {
+  margin-bottom: 20px;
+}
+
+.profile-page .page-heading h1 {
+  margin: 0 0 8px;
+}
+
+.profile-page .card {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 20px;
+  border-radius: 16px;
+  box-sizing: border-box;
+}
+
+.profile-page .card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-page .card-header h2 {
+  margin: 0 0 6px;
+}
+
+.profile-page .card-header p {
+  margin: 0;
+  color: var(--text-muted, #91a49d);
+}
+
+.profile-page .form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-page .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-page .field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.profile-page .field small {
+  line-height: 1.5;
+}
+
+.profile-page .form-stack > button[type='submit'] {
+  align-self: flex-end;
+  width: auto;
+  min-width: 120px;
+}
+
+@media (max-width: 600px) {
+  .profile-page {
+    padding-top: 0;
+  }
+
+  .profile-page .card {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .profile-page .form-stack > button[type='submit'] {
+    width: 100%;
+  }
+}
+

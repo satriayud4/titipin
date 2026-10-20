@@ -28,7 +28,7 @@ export default function ThemeToggle({ withLabel = false }: { withLabel?: boolean
   return (
     <button type="button" className={withLabel ? 'btn-ghost' : 'icon-btn'} onClick={toggle} aria-label={label} title={label}>
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-      {withLabel && <span style={{ marginLeft: 6 }}>{label}</span>}
+      {withLabel && <span>{label}</span>}
     </button>
   )
 }

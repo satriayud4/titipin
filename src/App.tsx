@@ -1,3 +1,4 @@
+
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import { StoreProvider } from './store/StoreContext'
@@ -7,6 +8,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import AuthCallback from './pages/AuthCallback'
+import ForgotPassword from './pages/ForgotPassword'
 import Home from './pages/Home'
 import Kasir from './pages/Kasir'
 import StockIntake from './pages/StockIntake'
@@ -18,6 +21,7 @@ import PaymentSettings from './pages/PaymentSettings'
 import Pengguna from './pages/Pengguna'
 import PengaturanToko from './pages/PengaturanToko'
 import Riwayat from './pages/Riwayat'
+import Profile from './pages/Profile'
 import { CategoriesPage, ProductsPage, SuppliersPage } from './pages/MasterData'
 
 export default function App() {
@@ -28,9 +32,20 @@ export default function App() {
           <ConfirmProvider>
             <BrowserRouter>
               <Routes>
+                {/* Halaman autentikasi: bisa diakses tanpa login */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+
+                {/* Halaman utama: wajib login */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
                   <Route path="/" element={<Home />} />
                   <Route path="/kasir" element={<Kasir />} />
                   <Route path="/barang-masuk" element={<StockIntake />} />
@@ -42,9 +57,32 @@ export default function App() {
                   <Route path="/kategori" element={<CategoriesPage />} />
                   <Route path="/supplier" element={<SuppliersPage />} />
                   <Route path="/riwayat" element={<Riwayat />} />
-                  <Route path="/pembayaran" element={<ProtectedRoute roles={['admin']}><PaymentSettings /></ProtectedRoute>} />
-                  <Route path="/pengguna" element={<ProtectedRoute superOnly><Pengguna /></ProtectedRoute>} />
-                  <Route path="/pengaturan" element={<ProtectedRoute superOnly><PengaturanToko /></ProtectedRoute>} />
+                  <Route path="/profil" element={<Profile />} />
+
+                  <Route
+                    path="/pembayaran"
+                    element={
+                      <ProtectedRoute roles={['admin']}>
+                        <PaymentSettings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/pengguna"
+                    element={
+                      <ProtectedRoute superOnly>
+                        <Pengguna />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/pengaturan"
+                    element={
+                      <ProtectedRoute superOnly>
+                        <PengaturanToko />
+                      </ProtectedRoute>
+                    }
+                  />
                 </Route>
               </Routes>
             </BrowserRouter>
