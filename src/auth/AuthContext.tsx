@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useCallback,
@@ -97,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null)
       setProfile(null)
     })
-
+  
     const { data } = supabase.auth.onAuthStateChange(
   (_event, nextSession) => {
     setSession(nextSession)
