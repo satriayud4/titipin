@@ -919,88 +919,317 @@ input[type='file'] { width: 100%; min-width: 0; }
 :root[data-theme='dark'] .boot span { color: #93a69e; }
 
 
-/* Profil akun */
+
+/* ========================================
+   TITIPIN — PROFIL AKUN
+   ======================================== */
+
 .profile-page {
   width: 100%;
   max-width: 760px;
+  min-width: 0;
   margin: 0 auto;
-  padding: 8px 0 32px;
+  padding: 8px 0 40px;
+  box-sizing: border-box;
 }
 
+/* Heading */
 .profile-page .page-heading {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .profile-page .page-heading h1 {
   margin: 0 0 8px;
+  font-size: clamp(1.45rem, 4vw, 1.85rem);
+  line-height: 1.3;
+  letter-spacing: -0.035em;
 }
 
+.profile-page .page-heading p {
+  margin: 0;
+  max-width: 480px;
+  color: var(--text-muted, #91a49d);
+  line-height: 1.65;
+  font-size: 0.94rem;
+}
+
+/* Kartu utama */
 .profile-page .card {
   width: 100%;
   min-width: 0;
-  margin: 0 0 16px;
-  padding: 20px;
-  border-radius: 16px;
+  margin: 0 0 18px;
+  padding: 24px;
+  border: 1px solid var(--border, rgba(145, 164, 157, 0.18));
+  border-radius: 20px;
   box-sizing: border-box;
+  background: var(--card-bg, var(--surface, transparent));
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.025);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
+/* Header setiap bagian */
 .profile-page .card-header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.profile-page .card-header > svg {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 13px;
+  color: var(--primary, #39866a);
+  background: var(--primary-soft, rgba(57, 134, 106, 0.11));
+}
+
+.profile-page .card-header > div {
+  min-width: 0;
+  padding-top: 2px;
 }
 
 .profile-page .card-header h2 {
   margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
 }
 
 .profile-page .card-header p {
   margin: 0;
   color: var(--text-muted, #91a49d);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
+/* Form */
 .profile-page .form-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  min-width: 0;
 }
 
 .profile-page .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
+}
+
+.profile-page .field > span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .profile-page .field input {
   width: 100%;
   min-width: 0;
+  min-height: 46px;
+  padding: 11px 13px;
+  border-radius: 12px;
   box-sizing: border-box;
+  font: inherit;
+  font-size: 0.925rem;
+  line-height: 1.5;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.profile-page .field input:focus-visible {
+  outline: none;
+  border-color: var(--primary, #39866a);
+  box-shadow: 0 0 0 3px var(--primary-soft, rgba(57, 134, 106, 0.14));
+}
+
+.profile-page .field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .profile-page .field small {
-  line-height: 1.5;
+  color: var(--text-muted, #91a49d);
+  font-size: 0.8rem;
+  line-height: 1.65;
 }
 
+/* Beri jarak yang konsisten antarform */
+.profile-page .card > .form-stack + .form-stack {
+  margin-top: 28px !important;
+  padding-top: 24px;
+  border-top: 1px solid var(--border, rgba(145, 164, 157, 0.18));
+}
+
+.profile-page .card > .field {
+  margin-top: 28px !important;
+  padding-top: 24px;
+  border-top: 1px solid var(--border, rgba(145, 164, 157, 0.18));
+}
+
+/* Tombol simpan */
 .profile-page .form-stack > button[type='submit'] {
   align-self: flex-end;
   width: auto;
-  min-width: 120px;
+  min-width: 140px;
+  min-height: 44px;
+  padding: 11px 18px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    box-shadow 160ms ease;
 }
 
+.profile-page .form-stack > button[type='submit']:not(:disabled) {
+  cursor: pointer;
+}
+
+.profile-page .form-stack > button[type='submit']:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.profile-page .form-stack > button[type='submit']:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* Pesan sukses dan error */
+.profile-page .notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, rgba(145, 164, 157, 0.2));
+  border-radius: 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.profile-page .notice > svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.profile-page .notice:not(.notice-error) > svg {
+  color: var(--success, #39966b);
+}
+
+.profile-page .notice-error {
+  border-color: rgba(220, 75, 75, 0.24);
+  color: var(--danger, #d85b5b);
+  background: rgba(220, 75, 75, 0.055);
+}
+
+/* PasswordField: pastikan komponen tidak meluber */
+.profile-page .field > * {
+  min-width: 0;
+}
+
+.profile-page .field > input,
+.profile-page .field > div {
+  max-width: 100%;
+}
+
+/* Mobile */
 @media (max-width: 600px) {
   .profile-page {
-    padding-top: 0;
+    padding: 0 0 28px;
+  }
+
+  .profile-page .page-heading {
+    margin-bottom: 18px;
+  }
+
+  .profile-page .page-heading h1 {
+    font-size: 1.5rem;
+  }
+
+  .profile-page .page-heading p {
+    font-size: 0.875rem;
   }
 
   .profile-page .card {
-    padding: 16px;
-    border-radius: 14px;
+    margin-bottom: 14px;
+    padding: 18px 16px;
+    border-radius: 17px;
+  }
+
+  .profile-page .card-header {
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .profile-page .card-header > svg {
+    width: 40px;
+    height: 40px;
+    padding: 9px;
+    border-radius: 12px;
+  }
+
+  .profile-page .card-header h2 {
+    font-size: 1rem;
+  }
+
+  .profile-page .card-header p {
+    font-size: 0.82rem;
+  }
+
+  .profile-page .form-stack {
+    gap: 16px;
+  }
+
+  .profile-page .field {
+    gap: 8px;
+  }
+
+  .profile-page .field input {
+    min-height: 48px;
+    padding: 12px;
+    font-size: 16px;
   }
 
   .profile-page .form-stack > button[type='submit'] {
     width: 100%;
+    min-height: 48px;
+    margin-top: 2px;
+  }
+
+  .profile-page .card > .form-stack + .form-stack {
+    margin-top: 24px !important;
+    padding-top: 22px;
+  }
+
+  .profile-page .card > .field {
+    margin-top: 24px !important;
+    padding-top: 22px;
+  }
+
+  .profile-page .notice {
+    padding: 12px;
+    font-size: 0.84rem;
   }
 }
 
+/* Hormati pengaturan pengurangan animasi */
+@media (prefers-reduced-motion: reduce) {
+  .profile-page .card,
+  .profile-page .field input,
+  .profile-page .form-stack > button[type='submit'] {
+    transition: none;
+  }
+}

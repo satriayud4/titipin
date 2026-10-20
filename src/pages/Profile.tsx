@@ -304,7 +304,7 @@ async function handleUsernameSubmit(e: FormEvent<HTMLFormElement>) {
       <div className="page-heading">
         <div>
           <h1>Profil Akun</h1>
-          <p>Kelola informasi dan keamanan akun Titipin kamu.</p>
+          <p>Kelola informasi dan keamanan akun kamu.</p>
         </div>
       </div>
 
