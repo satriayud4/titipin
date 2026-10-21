@@ -1233,3 +1233,49 @@ input[type='file'] { width: 100%; min-width: 0; }
     transition: none;
   }
 }
+
+/*
+  PasswordField reset pass: pastikan tombol toggle tidak menutupi teks input
+  (terutama di Safari iOS, di mana padding kanan input tidak selalu dihormati)
+*/
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 48px;
+}
+
+.password-input-wrap .password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #777);
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.password-input-wrap .password-toggle:hover {
+  color: var(--text, #222);
+  background: transparent;
+}
+
+.password-input-wrap .password-toggle:focus-visible {
+  outline: 2px solid var(--primary, #6366f1);
+  outline-offset: 1px;
+  border-radius: 6px;
+}

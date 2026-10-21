@@ -22,6 +22,7 @@ import Pengguna from './pages/Pengguna'
 import PengaturanToko from './pages/PengaturanToko'
 import Riwayat from './pages/Riwayat'
 import Profile from './pages/Profile'
+import ResetPassword from './pages/ResetPassword'
 import { CategoriesPage, ProductsPage, SuppliersPage } from './pages/MasterData'
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
 
                 {/* Halaman utama: wajib login */}
@@ -58,6 +60,8 @@ export default function App() {
                   <Route path="/supplier" element={<SuppliersPage />} />
                   <Route path="/riwayat" element={<Riwayat />} />
                   <Route path="/profil" element={<Profile />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  
 
                   <Route
                     path="/pembayaran"
