@@ -35,13 +35,6 @@ interface Category {
   name: string
 }
 
-interface Supplier {
-  id: number
-  name: string
-  phone: string | null
-  is_active: boolean
-}
-
 interface SelectedItem {
   productId: number
   quantity: number
@@ -64,10 +57,6 @@ export default function BuatPaket() {
   const [categories, setCategories] = useState<Category[]>([])
   const [prices, setPrices] = useState<Map<number, number>>(new Map())
   const [costPrices, setCostPrices] = useState<Map<number, number>>(new Map())
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [supplierByProduct, setSupplierByProduct] = useState(
-    new Map<number, number>(),
-  )
   const [selected, setSelected] = useState<SelectedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -85,146 +74,124 @@ export default function BuatPaket() {
   const [discountType, setDiscountType] = useState<DiscountType>('percent')
   const [discountInput, setDiscountInput] = useState('10')
 
-  
+  const load = useCallback(async () => {
+    setLoading(true)
 
-const load = useCallback(async () => {
-  setLoading(true)
+    try {
+      const [productResult, categoryResult, priceResult, costResult] =
+        await Promise.all([
+          supabase
+            .from('products')
+            .select('id, name, unit, category_id, image_path, is_active')
+            .order('name'),
 
-  try {
-    const [
-      productResult,
-      categoryResult,
-      priceResult,
-      costResult,
-      supplierResult,
-    ] = await Promise.all([
-      supabase
-        .from('products')
-        .select('id, name, unit, category_id, image_path, is_active')
-        .order('name'),
+          supabase.from('categories').select('id, name').order('name'),
 
-      supabase
-        .from('categories')
-        .select('id, name')
-        .order('name'),
+          supabase
+            .from('stock_batches')
+            .select('product_id, sell_price, id')
+            .order('id', { ascending: false })
+            .limit(5000),
 
-      supabase
-        .from('stock_batches')
-        .select('product_id, sell_price, supplier_id, id')
-        .order('id', { ascending: false })
-        .limit(5000),
+          supabase
+            .from('stock_batches')
+            .select('product_id, cost_price, id')
+            .order('id', { ascending: false })
+            .limit(5000),
+        ])
 
-      supabase
-        .from('stock_batches')
-        .select('product_id, cost_price, id')
-        .order('id', { ascending: false })
-        .limit(5000),
+      const error =
+        productResult.error ||
+        categoryResult.error ||
+        priceResult.error ||
+        costResult.error
 
-      supabase
-        .from('suppliers')
-        .select('id, name, phone, is_active')
-        .order('name'),
-    ])
+      if (error) throw error
 
-    const error =
-      productResult.error ||
-      categoryResult.error ||
-      priceResult.error ||
-      costResult.error ||
-      supplierResult.error
+      const priceMap = new Map<number, number>()
+      const costPriceMap = new Map<number, number>()
 
-    if (error) throw error
-
-    const priceMap = new Map<number, number>()
-    const costPriceMap = new Map<number, number>()
-    const supplierMap = new Map<number, number>()
-
-    // Data diurutkan dari barang masuk terbaru.
-    for (const row of priceResult.data ?? []) {
-      if (!priceMap.has(row.product_id)) {
-        priceMap.set(row.product_id, Number(row.sell_price))
+      // Ambil harga dari batch terbaru untuk setiap produk.
+      for (const row of priceResult.data ?? []) {
+        if (!priceMap.has(row.product_id)) {
+          priceMap.set(row.product_id, Number(row.sell_price))
+        }
       }
 
-      // Ambil supplier terbaru yang memiliki supplier_id.
-      if (
-        row.supplier_id !== null &&
-        !supplierMap.has(row.product_id)
-      ) {
-        supplierMap.set(
-          row.product_id,
-          Number(row.supplier_id),
+      for (const row of costResult.data ?? []) {
+        if (!costPriceMap.has(row.product_id)) {
+          costPriceMap.set(row.product_id, Number(row.cost_price))
+        }
+      }
+
+      if (isEdit && editId !== null) {
+        const [packageResult, itemsResult] = await Promise.all([
+          supabase.from('packages').select('*').eq('id', editId).maybeSingle(),
+          supabase
+            .from('package_items')
+            .select('product_id, quantity, sort_order')
+            .eq('package_id', editId)
+            .order('sort_order'),
+        ])
+
+        if (packageResult.error || itemsResult.error) {
+          throw packageResult.error || itemsResult.error
+        }
+
+        if (!packageResult.data) {
+          notify('Paket tidak ditemukan.', 'error')
+          navigate('/paket')
+          return
+        }
+
+        const rows = (itemsResult.data ?? []).filter(
+          (row) => row.product_id !== null,
         )
+
+        const pickedItems = rows.map((row) => ({
+          productId: Number(row.product_id),
+          quantity: Math.max(1, Math.round(Number(row.quantity)) || 1),
+        }))
+
+        const normal = pickedItems.reduce(
+          (sum, item) =>
+            sum + (priceMap.get(item.productId) ?? 0) * item.quantity,
+          0,
+        )
+
+        const pkg = packageResult.data as {
+          name: string
+          description: string | null
+          price: number
+          is_active: boolean
+          discount_type: DiscountType | null
+          discount_value: number | null
+        }
+
+        setName(pkg.name)
+        setDescription(pkg.description ?? '')
+        setIsActive(pkg.is_active)
+        setSelected(pickedItems)
+
+        if (pkg.discount_type && pkg.discount_value !== null) {
+          setDiscountType(pkg.discount_type)
+          setDiscountInput(String(pkg.discount_value))
+        } else {
+          setDiscountType('amount')
+          setDiscountInput(String(Math.max(0, normal - Number(pkg.price))))
+        }
       }
+
+      setProducts((productResult.data ?? []) as Product[])
+      setCategories((categoryResult.data ?? []) as Category[])
+      setPrices(priceMap)
+      setCostPrices(costPriceMap)
+    } catch (error) {
+      notify(errText(error), 'error')
+    } finally {
+      setLoading(false)
     }
-
-    for (const row of costResult.data ?? []) {
-      if (!costPriceMap.has(row.product_id)) {
-        costPriceMap.set(row.product_id, Number(row.cost_price))
-      }
-    }
-
-    if (isEdit) {
-      const [pk, it] = await Promise.all([
-        supabase.from('packages').select('*').eq('id', editId).maybeSingle(),
-        supabase
-          .from('package_items')
-          .select('product_id, quantity, sort_order')
-          .eq('package_id', editId)
-          .order('sort_order'),
-      ])
-      if (pk.error || it.error) throw pk.error || it.error
-      if (!pk.data) {
-        notify('Paket tidak ditemukan.', 'error')
-        navigate('/paket')
-        return
-      }
-
-      const rows = (it.data ?? []).filter((r) => r.product_id !== null)
-      const pickedItems = rows.map((r) => ({
-        productId: Number(r.product_id),
-        quantity: Math.max(1, Math.round(Number(r.quantity)) || 1),
-      }))
-      const normal = pickedItems.reduce(
-        (sum, r) => sum + (priceMap.get(r.productId) ?? 0) * r.quantity,
-        0,
-      )
-      const pkg = pk.data as {
-        name: string
-        description: string | null
-        price: number
-        is_active: boolean
-        discount_type: DiscountType | null
-        discount_value: number | null
-      }
-
-      setName(pkg.name)
-      setDescription(pkg.description ?? '')
-      setIsActive(pkg.is_active)
-      setSelected(pickedItems)
-      if (pkg.discount_type && pkg.discount_value !== null) {
-        setDiscountType(pkg.discount_type)
-        setDiscountInput(String(pkg.discount_value))
-      } else {
-        // paket lama tanpa data diskon: turunkan dari selisih harga normal dan harga paket
-        setDiscountType('amount')
-        setDiscountInput(String(Math.max(0, normal - Number(pkg.price))))
-      }
-    }
-
-    setProducts((productResult.data ?? []) as Product[])
-    setCategories((categoryResult.data ?? []) as Category[])
-    setPrices(priceMap)
-    setCostPrices(costPriceMap)
-    setSuppliers((supplierResult.data ?? []) as Supplier[])
-    setSupplierByProduct(supplierMap)
-  } catch (error) {
-    notify(errText(error), 'error')
-  } finally {
-    setLoading(false)
-  }
-}, [notify, navigate, isEdit, editId])
-
-
+  }, [notify, navigate, isEdit, editId])
 
   useEffect(() => {
     void load()
@@ -240,64 +207,18 @@ const load = useCallback(async () => {
     [products],
   )
 
+  // Setiap deklarasi hanya boleh ada satu kali.
   const selectedIds = useMemo(
     () => new Set(selected.map((item) => item.productId)),
     [selected],
   )
-
-  const supplierSummary = useMemo(() => {
-  const groups = new Map<
-    number,
-    {
-      supplier: Supplier
-      items: { name: string; quantity: number }[]
-    }
-  >()
-
-  const supplierById = new Map(
-    suppliers.map((supplier) => [supplier.id, supplier]),
-  )
-
-  const unknownProducts: string[] = []
-
-  for (const item of selected) {
-    const product = productById.get(item.productId)
-    if (!product) continue
-
-    const supplierId = supplierByProduct.get(item.productId)
-    const supplier = supplierId
-      ? supplierById.get(supplierId)
-      : undefined
-
-    if (!supplier) {
-      unknownProducts.push(product.name)
-      continue
-    }
-
-    const group = groups.get(supplier.id) ?? {
-      supplier,
-      items: [],
-    }
-
-    group.items.push({
-      name: product.name,
-      quantity: item.quantity,
-    })
-
-    groups.set(supplier.id, group)
-  }
-
-  return {
-    groups: Array.from(groups.values()),
-    unknownProducts,
-  }
-}, [selected, suppliers, supplierByProduct, productById])
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
 
     return products.filter((product) => {
       if (!product.is_active && !selectedIds.has(product.id)) return false
+
       const matchesSearch = product.name.toLowerCase().includes(query)
       const matchesCategory =
         !categoryId || String(product.category_id ?? '') === categoryId
@@ -306,48 +227,52 @@ const load = useCallback(async () => {
     })
   }, [products, search, categoryId, selectedIds])
 
-  const totals = useMemo(() => {
-  return selected.reduce(
-    (result, item) => {
-      const product = productById.get(item.productId)
-      const unitPrice = prices.get(item.productId) ?? 0
-      const unitCost = costPrices.get(item.productId) ?? 0
+  const totals = useMemo(
+    () =>
+      selected.reduce(
+        (result, item) => {
+          const product = productById.get(item.productId)
+          const unitPrice = prices.get(item.productId) ?? 0
+          const unitCost = costPrices.get(item.productId) ?? 0
 
-      return {
-        quantity: result.quantity + item.quantity,
-        normalPrice: result.normalPrice + unitPrice * item.quantity,
-        totalCost: result.totalCost + unitCost * item.quantity,
-        missingPrice:
-          result.missingPrice || !product || !prices.has(item.productId),
-        missingCost:
-          result.missingCost || !product || !costPrices.has(item.productId),
-      }
-    },
-    {
-      quantity: 0,
-      normalPrice: 0,
-      totalCost: 0,
-      missingPrice: false,
-      missingCost: false,
-    },
+          return {
+            quantity: result.quantity + item.quantity,
+            normalPrice: result.normalPrice + unitPrice * item.quantity,
+            totalCost: result.totalCost + unitCost * item.quantity,
+            missingPrice:
+              result.missingPrice || !product || !prices.has(item.productId),
+            missingCost:
+              result.missingCost ||
+              !product ||
+              !costPrices.has(item.productId),
+          }
+        },
+        {
+          quantity: 0,
+          normalPrice: 0,
+          totalCost: 0,
+          missingPrice: false,
+          missingCost: false,
+        },
+      ),
+    [selected, productById, prices, costPrices],
   )
-}, [selected, productById, prices, costPrices])
 
-const discountValue = Math.max(0, Number(discountInput) || 0)
+  const discountValue = Math.max(0, Number(discountInput) || 0)
 
-const discountAmount =
-  discountType === 'percent'
-    ? Math.min(
-        totals.normalPrice,
-        Math.round((totals.normalPrice * Math.min(discountValue, 100)) / 100),
-      )
-    : Math.min(totals.normalPrice, discountValue)
+  const discountAmount =
+    discountType === 'percent'
+      ? Math.min(
+          totals.normalPrice,
+          Math.round(
+            (totals.normalPrice * Math.min(discountValue, 100)) / 100,
+          ),
+        )
+      : Math.min(totals.normalPrice, discountValue)
 
-    const finalPrice = Math.max(0, totals.normalPrice - discountAmount)
-
-    const estimatedProfit = finalPrice - totals.totalCost
-
-    const profitMargin =
+  const finalPrice = Math.max(0, totals.normalPrice - discountAmount)
+  const estimatedProfit = finalPrice - totals.totalCost
+  const profitMargin =
     finalPrice > 0 ? (estimatedProfit / finalPrice) * 100 : 0
 
   function toggleProduct(product: Product) {
@@ -373,10 +298,13 @@ const discountAmount =
   }
 
   function setQuantity(productId: number, value: string) {
-    const n = Math.round(Number(value))
-    if (!Number.isFinite(n) || n < 1) return
+    const quantity = Math.round(Number(value))
+    if (!Number.isFinite(quantity) || quantity < 1) return
+
     setSelected((current) =>
-      current.map((item) => (item.productId === productId ? { ...item, quantity: n } : item)),
+      current.map((item) =>
+        item.productId === productId ? { ...item, quantity } : item,
+      ),
     )
   }
 
@@ -410,13 +338,21 @@ const discountAmount =
       return
     }
 
-    if (discountType === 'percent' && discountValue > 100) {
-      notify('Diskon persentase maksimal 100%.', 'error')
+    if (
+      discountInput.trim() === '' ||
+      !Number.isFinite(Number(discountInput))
+    ) {
+      notify('Masukkan nilai diskon yang valid.', 'error')
       return
     }
 
-    if (discountInput.trim() === '' || !Number.isFinite(Number(discountInput))) {
-      notify('Masukkan nilai diskon yang valid.', 'error')
+    if (discountValue < 0) {
+      notify('Nilai diskon tidak boleh negatif.', 'error')
+      return
+    }
+
+    if (discountType === 'percent' && discountValue > 100) {
+      notify('Diskon persentase maksimal 100%.', 'error')
       return
     }
 
@@ -437,29 +373,46 @@ const discountAmount =
 
       if (isEdit) {
         packageId = editId as number
+
         const { data, error } = await supabase
           .from('packages')
           .update({ ...payload, updated_at: new Date().toISOString() })
           .eq('id', packageId)
           .select('id')
+
         if (error) throw error
-        if (!data?.length) throw new Error('Perubahan ditolak. Periksa izin akses di Supabase.')
+        if (!data?.length) {
+          throw new Error(
+            'Perubahan ditolak. Periksa izin akses di Supabase.',
+          )
+        }
       } else {
-        const { data, error } = await supabase.from('packages').insert(payload).select('id').single()
+        const { data, error } = await supabase
+          .from('packages')
+          .insert(payload)
+          .select('id')
+          .single()
+
         if (error) throw error
         packageId = Number(data.id)
       }
 
-      // menu lama baru dihapus setelah menu baru berhasil disimpan, supaya tidak ada paket kosong bila gagal
+      // Ambil item lama sebelum menggantinya saat mode edit.
       let oldIds: number[] = []
+
       if (isEdit) {
-        const { data, error } = await supabase.from('package_items').select('id').eq('package_id', packageId)
+        const { data, error } = await supabase
+          .from('package_items')
+          .select('id')
+          .eq('package_id', packageId)
+
         if (error) throw error
-        oldIds = (data ?? []).map((r) => Number(r.id))
+        oldIds = (data ?? []).map((row) => Number(row.id))
       }
 
       const itemPayload = selected.map((item, index) => {
         const product = productById.get(item.productId)!
+
         return {
           package_id: packageId,
           product_id: product.id,
@@ -471,24 +424,34 @@ const discountAmount =
         }
       })
 
-      const { error: itemsError } = await supabase.from('package_items').insert(itemPayload)
+      const { error: itemsError } = await supabase
+        .from('package_items')
+        .insert(itemPayload)
 
       if (itemsError) {
         if (!isEdit) {
-          // Hindari meninggalkan paket tanpa daftar menu jika penyimpanan item gagal.
-          const { error: cleanupError } = await supabase.from('packages').delete().eq('id', packageId)
+          const { error: cleanupError } = await supabase
+            .from('packages')
+            .delete()
+            .eq('id', packageId)
+
           if (cleanupError) {
             throw new Error(
               `Daftar menu gagal disimpan: ${errText(itemsError)}. Paket utama mungkin masih tersimpan dengan ID ${packageId}.`,
             )
           }
         }
+
         throw itemsError
       }
 
       if (oldIds.length > 0) {
-        const { error: delError } = await supabase.from('package_items').delete().in('id', oldIds)
-        if (delError) throw delError
+        const { error: deleteError } = await supabase
+          .from('package_items')
+          .delete()
+          .in('id', oldIds)
+
+        if (deleteError) throw deleteError
       }
 
       notify(isEdit ? 'Paket berhasil diperbarui.' : 'Paket berhasil dibuat.')
@@ -554,7 +517,11 @@ const discountAmount =
 
               {isEdit && (
                 <label className="check">
-                  <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(event) => setIsActive(event.target.checked)}
+                  />
                   Paket aktif (bisa dipilih di Pembelian Paket)
                 </label>
               )}
@@ -589,7 +556,10 @@ const discountAmount =
               </button>
             </div>
 
-            <div className="search" style={{ maxWidth: 'none', marginBottom: 12 }}>
+            <div
+              className="search"
+              style={{ maxWidth: 'none', marginBottom: 12 }}
+            >
               <Search size={18} />
               <input
                 placeholder="Cari nama produk..."
@@ -639,7 +609,9 @@ const discountAmount =
                   Tampilan
                   <select
                     value={view}
-                    onChange={(event) => setView(event.target.value as ViewMode)}
+                    onChange={(event) =>
+                      setView(event.target.value as ViewMode)
+                    }
                   >
                     <option value="grid">Grid</option>
                     <option value="list">List</option>
@@ -701,7 +673,9 @@ const discountAmount =
                   className={`pill${categoryId === String(category.id) ? ' on' : ''}`}
                   onClick={() =>
                     setCategoryId(
-                      categoryId === String(category.id) ? '' : String(category.id),
+                      categoryId === String(category.id)
+                        ? ''
+                        : String(category.id),
                     )
                   }
                 >
@@ -750,6 +724,8 @@ const discountAmount =
                 {filteredProducts.map((product) => {
                   const isSelected = selectedIds.has(product.id)
                   const unitPrice = prices.get(product.id)
+                  const imageHeight =
+                    cardSize === 'small' ? 92 : cardSize === 'large' ? 170 : 125
 
                   return (
                     <button
@@ -768,7 +744,9 @@ const discountAmount =
                         padding: 0,
                         borderRadius: 13,
                         border: `1px solid ${isSelected ? 'var(--success)' : 'var(--border)'}`,
-                        background: isSelected ? 'var(--surface-secondary)' : 'var(--surface)',
+                        background: isSelected
+                          ? 'var(--surface-secondary)'
+                          : 'var(--surface)',
                         cursor: 'pointer',
                         position: 'relative',
                       }}
@@ -780,7 +758,7 @@ const discountAmount =
                           loading="lazy"
                           style={{
                             width: view === 'list' ? 68 : '100%',
-                            height: view === 'list' ? 68 : cardSize === 'small' ? 92 : cardSize === 'large' ? 170 : 125,
+                            height: view === 'list' ? 68 : imageHeight,
                             objectFit: 'cover',
                             flexShrink: 0,
                           }}
@@ -791,7 +769,7 @@ const discountAmount =
                             display: 'grid',
                             placeItems: 'center',
                             width: view === 'list' ? 68 : '100%',
-                            height: view === 'list' ? 68 : cardSize === 'small' ? 92 : cardSize === 'large' ? 170 : 125,
+                            height: view === 'list' ? 68 : imageHeight,
                             background: 'var(--surface-secondary)',
                             flexShrink: 0,
                           }}
@@ -837,7 +815,8 @@ const discountAmount =
                           {product.name}
                         </strong>
                         <span className="page-sub">
-                          {categoryNames.get(product.category_id ?? -1) ?? 'Tanpa kategori'}
+                          {categoryNames.get(product.category_id ?? -1) ??
+                            'Tanpa kategori'}
                         </span>
                         <strong style={{ fontSize: 13 }}>
                           {unitPrice === undefined
@@ -868,11 +847,11 @@ const discountAmount =
           }}
         >
           <div>
-  <h2 style={{ margin: 0, fontSize: 19 }}>Ringkasan paket</h2>
-  <div className="page-sub">
-    {selected.length} jenis produk · {totals.quantity} item per paket
-  </div>
-</div>
+            <h2 style={{ margin: 0, fontSize: 19 }}>Ringkasan paket</h2>
+            <div className="page-sub">
+              {selected.length} jenis produk · {totals.quantity} item per paket
+            </div>
+          </div>
 
           {selected.length === 0 ? (
             <div
@@ -884,7 +863,9 @@ const discountAmount =
               }}
             >
               <ShoppingBag size={28} />
-              <p style={{ marginBottom: 0 }}>Klik produk di katalog untuk mulai menyusun paket.</p>
+              <p style={{ marginBottom: 0 }}>
+                Klik produk di katalog untuk mulai menyusun paket.
+              </p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 12 }}>
@@ -942,8 +923,16 @@ const discountAmount =
                           aria-label={`Jumlah ${product.name}`}
                           value={item.quantity}
                           onFocus={(event) => event.currentTarget.select()}
-                          onChange={(event) => setQuantity(product.id, event.target.value)}
-                          style={{ width: 64, minHeight: 0, padding: '4px 6px', textAlign: 'center', fontWeight: 700 }}
+                          onChange={(event) =>
+                            setQuantity(product.id, event.target.value)
+                          }
+                          style={{
+                            width: 64,
+                            minHeight: 0,
+                            padding: '4px 6px',
+                            textAlign: 'center',
+                            fontWeight: 700,
+                          }}
                         />
                         <button
                           type="button"
@@ -1008,28 +997,25 @@ const discountAmount =
                 −{rupiah(discountAmount)}
               </strong>
             </div>
-
             <div className="sum-row">
-            <span>Total modal</span>
-            <strong>{rupiah(totals.totalCost)}</strong>
+              <span>Total modal</span>
+              <strong>{rupiah(totals.totalCost)}</strong>
             </div>
-
             <div className="sum-row">
-            <span>Laba paket</span>
-            <strong
+              <span>Laba paket</span>
+              <strong
                 style={{
-                color: estimatedProfit >= 0 ? 'var(--success)' : 'var(--danger)',
+                  color:
+                    estimatedProfit >= 0 ? 'var(--success)' : 'var(--danger)',
                 }}
-            >
+              >
                 {rupiah(estimatedProfit)}
-            </strong>
+              </strong>
             </div>
-
             <div className="sum-row">
-            <span>Margin laba</span>
-            <strong>{profitMargin.toFixed(1)}%</strong>
+              <span>Margin laba</span>
+              <strong>{profitMargin.toFixed(1)}%</strong>
             </div>
-
             <div className="sum-row total">
               <span>Harga paket</span>
               <strong style={{ color: 'var(--success)', fontSize: 20 }}>
@@ -1040,13 +1026,15 @@ const discountAmount =
 
           {totals.missingCost && (
             <div className="notice">
-                Modal beberapa produk belum tersedia. Laba yang tampil belum akurat.
+              Modal beberapa produk belum tersedia. Laba yang tampil belum
+              akurat.
             </div>
-            )}
+          )}
 
           {totals.missingPrice && (
             <div className="notice">
-              Ada produk tanpa harga jual. Catat harga melalui Barang Masuk sebelum menyimpan paket.
+              Ada produk tanpa harga jual. Catat harga melalui Barang Masuk
+              sebelum menyimpan paket.
             </div>
           )}
 
@@ -1064,7 +1052,11 @@ const discountAmount =
               }
             >
               <Check size={17} />
-              {saving ? 'Menyimpan paket...' : isEdit ? 'Simpan Perubahan' : 'Simpan Paket'}
+              {saving
+                ? 'Menyimpan paket...'
+                : isEdit
+                  ? 'Simpan Perubahan'
+                  : 'Simpan Paket'}
             </button>
 
             <button
@@ -1080,7 +1072,11 @@ const discountAmount =
               <Trash2 size={16} /> Kosongkan pilihan
             </button>
 
-            <Link to="/paket" className="btn-icon" style={{ justifyContent: 'center' }}>
+            <Link
+              to="/paket"
+              className="btn-icon"
+              style={{ justifyContent: 'center' }}
+            >
               Batal
             </Link>
           </div>
