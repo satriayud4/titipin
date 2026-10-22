@@ -35,13 +35,6 @@ interface Category {
   name: string
 }
 
-interface Supplier {
-  id: number
-  name: string
-  phone: string | null
-  is_active: boolean
-}
-
 interface SelectedItem {
   productId: number
   quantity: number
@@ -64,10 +57,6 @@ export default function BuatPaket() {
   const [categories, setCategories] = useState<Category[]>([])
   const [prices, setPrices] = useState<Map<number, number>>(new Map())
   const [costPrices, setCostPrices] = useState<Map<number, number>>(new Map())
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [supplierByProduct, setSupplierByProduct] = useState(
-    new Map<number, number>(),
-  )
   const [selected, setSelected] = useState<SelectedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -96,7 +85,6 @@ const load = useCallback(async () => {
       categoryResult,
       priceResult,
       costResult,
-      supplierResult,
     ] = await Promise.all([
       supabase
         .from('products')
@@ -110,7 +98,7 @@ const load = useCallback(async () => {
 
       supabase
         .from('stock_batches')
-        .select('product_id, sell_price, supplier_id, id')
+        .select('product_id, sell_price, id')
         .order('id', { ascending: false })
         .limit(5000),
 
@@ -119,41 +107,23 @@ const load = useCallback(async () => {
         .select('product_id, cost_price, id')
         .order('id', { ascending: false })
         .limit(5000),
-
-      supabase
-        .from('suppliers')
-        .select('id, name, phone, is_active')
-        .order('name'),
     ])
 
     const error =
       productResult.error ||
       categoryResult.error ||
       priceResult.error ||
-      costResult.error ||
-      supplierResult.error
+      costResult.error
 
     if (error) throw error
 
     const priceMap = new Map<number, number>()
     const costPriceMap = new Map<number, number>()
-    const supplierMap = new Map<number, number>()
 
     // Data diurutkan dari barang masuk terbaru.
     for (const row of priceResult.data ?? []) {
       if (!priceMap.has(row.product_id)) {
         priceMap.set(row.product_id, Number(row.sell_price))
-      }
-
-      // Ambil supplier terbaru yang memiliki supplier_id.
-      if (
-        row.supplier_id !== null &&
-        !supplierMap.has(row.product_id)
-      ) {
-        supplierMap.set(
-          row.product_id,
-          Number(row.supplier_id),
-        )
       }
     }
 
@@ -215,8 +185,6 @@ const load = useCallback(async () => {
     setCategories((categoryResult.data ?? []) as Category[])
     setPrices(priceMap)
     setCostPrices(costPriceMap)
-    setSuppliers((supplierResult.data ?? []) as Supplier[])
-    setSupplierByProduct(supplierMap)
   } catch (error) {
     notify(errText(error), 'error')
   } finally {
@@ -244,54 +212,6 @@ const load = useCallback(async () => {
     () => new Set(selected.map((item) => item.productId)),
     [selected],
   )
-
-  const supplierSummary = useMemo(() => {
-  const groups = new Map<
-    number,
-    {
-      supplier: Supplier
-      items: { name: string; quantity: number }[]
-    }
-  >()
-
-  const supplierById = new Map(
-    suppliers.map((supplier) => [supplier.id, supplier]),
-  )
-
-  const unknownProducts: string[] = []
-
-  for (const item of selected) {
-    const product = productById.get(item.productId)
-    if (!product) continue
-
-    const supplierId = supplierByProduct.get(item.productId)
-    const supplier = supplierId
-      ? supplierById.get(supplierId)
-      : undefined
-
-    if (!supplier) {
-      unknownProducts.push(product.name)
-      continue
-    }
-
-    const group = groups.get(supplier.id) ?? {
-      supplier,
-      items: [],
-    }
-
-    group.items.push({
-      name: product.name,
-      quantity: item.quantity,
-    })
-
-    groups.set(supplier.id, group)
-  }
-
-  return {
-    groups: Array.from(groups.values()),
-    unknownProducts,
-  }
-}, [selected, suppliers, supplierByProduct, productById])
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
