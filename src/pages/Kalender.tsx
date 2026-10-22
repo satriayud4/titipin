@@ -10,7 +10,7 @@ import { DayStatusModal, HoursModal, OrderDetailModal, OrderModal } from '../com
 import { ALERTS_REFRESH_EVENT } from '../lib/alerts'
 import { addDays } from '../lib/dates'
 import { errText } from '../lib/errors'
-import {
+import { 
   ORDER_SOURCE,
   STATUS_LABEL,
   WEEK_HEAD,
@@ -115,7 +115,7 @@ export default function Kalender() {
     window.dispatchEvent(new Event(ALERTS_REFRESH_EVENT))
   }, [])
 
-  // data bulan yang tampil (+ hari ini, bila di luar bulan itu)
+  // data bulan yg tampil (+ hari ini, bila di luar bulan itu)
   useEffect(() => {
     let cancelled = false
     void (async () => {
