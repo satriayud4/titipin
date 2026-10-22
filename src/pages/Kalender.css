@@ -1,0 +1,236 @@
+/* ============ Kalender & Operasional ============
+   Memakai token warna SARAGA (--primary, --surface, dst.) sehingga otomatis
+   mengikuti mode terang/gelap. Semua kelas diawali "kal-" / "tl-". */
+
+.kal { display: grid; gap: 16px; min-width: 0; }
+.kal h2, .kal h3 { margin: 0; }
+.kal h3 { font-size: 0.98rem; font-weight: 700; }
+.kal .page-head { margin-bottom: 2px; }
+.kal-loading { padding: 40px 0; text-align: center; color: var(--muted); }
+.kal-setup { display: grid; gap: 8px; }
+.kal-setup p { margin: 0; color: var(--muted); }
+.kal-setup code { padding: 1px 6px; border-radius: 6px; background: var(--surface-2); }
+
+/* ---------- Label kecil ---------- */
+.kal-tag {
+  display: inline-flex; align-items: center; flex: none; padding: 2px 10px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap; background: var(--surface-2); color: var(--muted);
+}
+.kal-tag.danger { background: var(--danger-soft); color: var(--danger); }
+.kal-tag.warning { background: var(--warning-soft); color: var(--warning); }
+.kal-tag.info { background: var(--info-soft); color: var(--info); }
+.kal-tag.success { background: var(--success-soft); color: var(--success); }
+
+/* ---------- Kartu "Hari ini" ---------- */
+.kal-hero { display: grid; gap: 20px; padding: 18px; min-width: 0; }
+.kal-hero-main { display: grid; gap: 16px; min-width: 0; align-content: start; }
+.kal-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.kal-date { color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+
+.kal-status { display: flex; align-items: center; gap: 14px; min-width: 0; --tone: var(--muted); }
+.kal-status.open { --tone: var(--success); }
+.kal-status.soon { --tone: var(--warning); }
+.kal-status.closed { --tone: var(--danger); }
+.kal-status strong { display: block; font-size: clamp(1.4rem, 1.1rem + 1.4vw, 1.95rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.kal-status > div > span { display: block; margin-top: 3px; color: var(--muted); font-size: 0.92rem; }
+.kal-status-dot { position: relative; flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--tone); }
+.kal-status.open .kal-status-dot::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--tone);
+  animation: kal-ping 2.4s var(--ease) infinite;
+}
+
+.kal-onduty { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; color: var(--muted); font-size: 0.9rem; }
+.kal-person {
+  display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px 3px 3px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text); font-weight: 600; font-size: 0.88rem;
+}
+.kal-person i, .kal-avatar {
+  display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%;
+  font-style: normal; font-weight: 800; font-size: 0.78rem; color: var(--text);
+  background: color-mix(in srgb, hsl(var(--h) 62% 46%) 24%, var(--surface));
+  border: 2px solid hsl(var(--h) 62% 46%);
+}
+.kal-closed-card {
+  display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: var(--r-sm);
+  background: var(--danger-soft); color: var(--danger); font-weight: 600;
+}
+
+.kal-hero-side { display: grid; gap: 12px; align-content: start; min-width: 0; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+
+/* ---------- Lintasan hari (timeline) ---------- */
+.tl { --who: 124px; position: relative; min-width: 0; font-variant-numeric: tabular-nums; }
+.tl-axis { position: relative; height: 22px; margin-left: var(--who); color: var(--muted); font-size: 0.72rem; font-weight: 600; }
+.tl-axis span { position: absolute; top: 0; transform: translateX(-50%); }
+.tl-axis span:first-child { transform: none; }
+.tl-axis span:last-child { transform: translateX(-100%); }
+.tl-body { position: relative; display: grid; gap: 8px; }
+.tl-body.has-now { padding-bottom: 26px; }
+.tl-overlay { position: absolute; top: 0; bottom: 0; left: var(--who); right: 0; z-index: 2; pointer-events: none; }
+.tl-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-soft); opacity: 0.8; }
+.tl-now {
+  position: absolute; top: -3px; bottom: 0; width: 2px; margin-left: -1px; border-radius: 2px;
+  background: var(--danger); transition: left 0.8s var(--ease);
+}
+.tl-now::before {
+  content: ''; position: absolute; top: -3px; left: 50%; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); transform: translateX(-50%);
+}
+.tl-now b {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); padding: 1px 8px; border-radius: 999px;
+  background: var(--danger); color: var(--on-danger); font-size: 0.7rem; font-weight: 700; white-space: nowrap;
+}
+
+.tl-lane { display: grid; grid-template-columns: var(--who) minmax(0, 1fr); align-items: center; }
+.tl-who { min-width: 0; padding-right: 12px; font-size: 0.88rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-track { position: relative; height: 38px; border-radius: 10px; background: var(--surface-2); }
+.tl-bar {
+  position: absolute; top: 3px; bottom: 3px; min-width: 46px; min-height: 0; padding: 0 10px;
+  display: flex; align-items: center; justify-content: flex-start; border-radius: 8px;
+  font-size: 0.8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transform-origin: left center; animation: kal-grow 0.6s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms);
+}
+.tl-bar-store {
+  background: var(--primary-soft); color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.tl-bar-shift {
+  --c: hsl(var(--h) 62% 46%);
+  background: color-mix(in srgb, var(--c) 20%, var(--surface)); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent); border-left: 4px solid var(--c);
+}
+.tl-bar-shift.active { background: color-mix(in srgb, var(--c) 34%, var(--surface)); border-style: dashed; border-left-style: solid; }
+
+@media (max-width: 639px) {
+  .tl { --who: 0px; }
+  .tl-lane { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .tl-body { gap: 10px; }
+  .tl-who { padding: 0 2px; font-size: 0.82rem; }
+}
+
+/* ---------- Susunan halaman ---------- */
+.kal-main { display: grid; gap: 16px; min-width: 0; }
+
+/* ---------- Kalender bulanan ---------- */
+.kal-cal { padding: 14px; min-width: 0; }
+.kal-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.kal-cal-head h2 { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+.kal-nav { display: flex; align-items: center; gap: 4px; }
+.kal-week, .kal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.kal-week span { padding: 4px 0; text-align: center; color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+
+.kal-cell {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  gap: 3px; min-width: 0; min-height: 58px; padding: 5px; text-align: left; font-weight: 600;
+  border-radius: 12px; border: 1px solid transparent; background: var(--surface-2); overflow: hidden;
+}
+.kal-cell:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--border); }
+.kal-cell.out { opacity: 0.45; }
+.kal-cell.is-closed {
+  background:
+    repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--danger) 11%, transparent) 6px 12px),
+    var(--surface-2);
+}
+.kal-cell.is-sel {
+  border-color: var(--primary); background: var(--primary-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+.kal-num { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 4px; border-radius: 999px; font-size: 0.88rem; }
+.kal-cell.is-today .kal-num { background: var(--primary); color: var(--on-primary); }
+.kal-closed { font-size: 0.64rem; font-weight: 700; color: var(--danger); line-height: 1; }
+.kal-chips { display: none; flex-wrap: wrap; gap: 4px; }
+.kal-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border-soft); font-size: 0.72rem; font-weight: 700;
+}
+.kal-chip.danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.kal-chip.warning { background: var(--warning-soft); color: var(--warning); border-color: transparent; }
+.kal-chip.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.kal-dots { display: flex; gap: 3px; margin-top: auto; min-height: 6px; }
+.kal-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.kal-dot.shift { background: var(--primary); }
+.kal-dot.warning { background: var(--warning); }
+.kal-dot.info { background: var(--info); }
+.kal-dot.danger { background: var(--danger); }
+
+.kal-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; color: var(--muted); font-size: 0.78rem; }
+.kal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.kal-swatch {
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--danger) 35%, transparent) 3px 6px), var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+/* ---------- Panel detail tanggal ---------- */
+.kal-detail { display: grid; gap: 18px; padding: 16px; min-width: 0; align-content: start; animation: kal-swap 0.28s var(--ease) both; }
+.kal-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.kal-detail-head h2 { font-size: 1.1rem; line-height: 1.3; }
+.kal-hours-line { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-weight: 600; font-size: 0.92rem; color: var(--primary); }
+.kal-hours-line.closed { color: var(--danger); }
+.kal-sec { display: grid; gap: 10px; }
+.kal-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kal-rows { display: grid; gap: 8px; }
+.kal-empty { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+.kal-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; min-height: 0; padding: 10px 12px;
+  text-align: left; font-weight: 500; border-radius: 12px; background: var(--surface-2); border: 1px solid transparent;
+}
+button.kal-row:not(:disabled):hover { background: var(--surface-2); border-color: var(--primary); }
+button.kal-row:disabled { opacity: 1; cursor: default; }
+.kal-empty a { color: var(--primary); font-weight: 600; }
+.kal-row-main { flex: 1; min-width: 0; }
+.kal-row-main strong { display: block; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.kal-row-main small { display: block; overflow-wrap: anywhere; }
+.kal-avatar { width: 34px; height: 34px; font-size: 0.85rem; }
+.kal-time { flex: none; font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.kal-order { --tone: var(--muted); border-left: 4px solid var(--tone); }
+.kal-order.danger { --tone: var(--danger); }
+.kal-order.warning { --tone: var(--warning); }
+.kal-order.info { --tone: var(--info); }
+.kal-order.success { --tone: var(--success); }
+.kal-order.finished { opacity: 0.7; }
+.kal-order.finished strong { text-decoration: line-through; }
+div.kal-order { padding: 0; gap: 0; align-items: stretch; }
+.kal-row-hit {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 0; padding: 10px 12px;
+  text-align: left; font-weight: 500; background: transparent; border: 0; border-radius: 12px 0 0 12px; box-shadow: none;
+}
+.kal-row-hit:hover:not(:disabled) { background: color-mix(in srgb, var(--tone) 10%, transparent); }
+.kal-done { flex: none; width: 44px; border-radius: 0 12px 12px 0; color: var(--success); }
+.kal-done:hover:not(:disabled) { background: var(--success-soft); }
+
+/* ---------- Isi jendela ubah ---------- */
+.kal-time-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
+.kal-hours { display: grid; gap: 8px; }
+.kal-hours-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.kal-hours-row.off { opacity: 0.75; }
+.kal-check { display: flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; }
+.kal-off-text { color: var(--muted); font-size: 0.9rem; }
+@media (min-width: 520px) {
+  .kal-hours-row { grid-template-columns: 130px minmax(0, 1fr); align-items: center; }
+}
+
+/* ---------- Layar lebar ---------- */
+@media (min-width: 640px) {
+  .kal-cell { min-height: 100px; padding: 8px; gap: 5px; }
+  .kal-chips { display: flex; }
+  .kal-dots { display: none; }
+  .kal-closed { font-size: 0.72rem; }
+}
+@media (min-width: 1100px) {
+  .kal-hero { grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; padding: 22px; }
+  .kal-hero-side { padding-top: 0; border-top: 0; padding-left: 26px; border-left: 1px solid var(--border-soft); }
+  .kal-main { grid-template-columns: minmax(0, 1fr) 390px; align-items: start; }
+  .kal-detail { position: sticky; top: 84px; }
+}
+
+/* ---------- Gerak ---------- */
+@keyframes kal-grow { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes kal-ping { 0% { transform: scale(0.7); opacity: 0.8; } 70%, 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes kal-swap { from { opacity: 0.4; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-bar, .kal-detail, .kal-status.open .kal-status-dot::after { animation: none; }
+  .tl-now { transition: none; }
+}

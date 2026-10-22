@@ -5,6 +5,7 @@ import {
   HandCoins,
   LayoutDashboard,
   Package,
+  PackageCheck,
   PackagePlus,
   Settings,
   ShoppingCart,
@@ -13,6 +14,7 @@ import {
   Undo2,
   Users,
   ReceiptText,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../auth/AuthContext'
@@ -34,7 +36,8 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/kasir', label: 'Kasir', icon: ShoppingCart },
-            { to: '/riwayat', label: 'Riwayat Transaksi', icon: ReceiptText },
+      { to: '/riwayat', label: 'Riwayat Transaksi', icon: ReceiptText },
+      { to: '/kalender', label: 'Kalender', icon: CalendarDays },
     ],
   },
   {
@@ -53,13 +56,22 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Master data',
-    items: [
-      { to: '/produk', label: 'Produk', icon: Package },
-      { to: '/kategori', label: 'Kategori', icon: Tags },
-      { to: '/supplier', label: 'Supplier', icon: Truck },
-    ],
-  },
+  title: 'Master data',
+  items: [
+    { to: '/produk', label: 'Produk', icon: Package },
+    { to: '/paket', label: 'Master Paket', icon: PackageCheck },
+    { to: '/kategori', label: 'Kategori', icon: Tags },
+    { to: '/supplier', label: 'Supplier', icon: Truck },
+  ],
+},
+
+{
+  title: 'Operasional',
+  items: [
+    { to: '/pembelian-paket', label: 'Pembelian Paket', icon: ShoppingCart },
+  ],
+},
+
   {
     title: 'Admin',
     items: [

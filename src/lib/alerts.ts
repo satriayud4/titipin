@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { addDays, todayWIB } from './dates'
 import { rupiah } from './format'
+import { ORDER_SOURCE, nowWIB, orderUrgency, urgencyTone, type OrderRow } from './kalender'
 
 export interface AlertItem {
   id: string
@@ -10,6 +11,10 @@ export interface AlertItem {
   detail: string
   to: string
 }
+
+/** Kirim event ini (window.dispatchEvent) supaya lonceng notifikasi langsung memuat ulang. */
+export const ALERTS_REFRESH_EVENT = 'saraga:alerts-refresh'
+const RECHECK_MS = 5 * 60 * 1000 // periksa ulang tiap 5 menit agar pesanan mepet tidak terlewat
 
 export const LOW_STOCK = 3 // sisa stok sebanyak ini atau kurang dianggap menipis
 
@@ -27,18 +32,35 @@ interface SettleRow {
 
 export function useAlerts(refreshKey: string) {
   const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1)
+    const id = window.setInterval(bump, RECHECK_MS)
+    window.addEventListener(ALERTS_REFRESH_EVENT, bump)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener(ALERTS_REFRESH_EVENT, bump)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       const today = todayWIB()
-      const [b, p, s] = await Promise.all([
+      const [b, p, s, o] = await Promise.all([
         supabase
           .from('batch_stock')
           .select('product_id, qty_remaining, received_date, sellable_until, return_due_date')
           .gt('qty_remaining', 0),
         supabase.from('products').select('id, name'),
         supabase.rpc('supplier_settlement_report', { p_date: addDays(today, -1) }),
+        supabase
+          .from('scheduled_orders')
+          .select('id, title, party, due_date, due_time, status')
+          .eq('source', ORDER_SOURCE)
+          .in('status', ['pending', 'processing'])
+          .lte('due_date', addDays(today, 1)),
       ])
       if (cancelled || b.error) return
 
@@ -90,6 +112,26 @@ export function useAlerts(refreshKey: string) {
         }
       }
 
+      // pesanan yang tenggatnya mepet (tabel kalender belum dibuat → dilewati begitu saja)
+      if (!o.error) {
+        const now = nowWIB()
+        ;((o.data ?? []) as Pick<OrderRow, 'id' | 'title' | 'party' | 'due_date' | 'due_time' | 'status'>[])
+          .map((x) => ({ x, u: orderUrgency(x, now) }))
+          .filter(({ u }) => u.level !== 'later' && u.level !== 'none')
+          .sort((a, b) => a.x.due_date.localeCompare(b.x.due_date) || (a.x.due_time ?? '').localeCompare(b.x.due_time ?? ''))
+          .slice(0, 6)
+          .forEach(({ x, u }) => {
+            const tone = urgencyTone(u.level)
+            list.push({
+              id: `order-${x.id}`,
+              kind: tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'info',
+              title: `Pesanan ${x.title}`,
+              detail: x.party ? `${u.label} · ${x.party}` : u.label,
+              to: `/kalender?tanggal=${x.due_date}`,
+            })
+          })
+      }
+
       const order = { danger: 0, warning: 1, info: 2 }
       list.sort((x, y) => order[x.kind] - order[y.kind])
       if (!cancelled) setAlerts(list)
@@ -97,7 +139,7 @@ export function useAlerts(refreshKey: string) {
     return () => {
       cancelled = true
     }
-  }, [refreshKey])
+  }, [refreshKey, tick])
 
   return alerts
 }

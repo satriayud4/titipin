@@ -24,6 +24,10 @@ import Riwayat from './pages/Riwayat'
 import Profile from './pages/Profile'
 import ResetPassword from './pages/ResetPassword'
 import { CategoriesPage, ProductsPage, SuppliersPage } from './pages/MasterData'
+import PackagesPage from './pages/PackagesPage'
+import BuatPaket from './pages/BuatPaket'
+import PembelianPaket from './pages/PembelianPaket'
+import Kalender from './pages/Kalender'
 
 export default function App() {
   return (
@@ -56,12 +60,16 @@ export default function App() {
                   <Route path="/setoran" element={<Setoran />} />
                   <Route path="/laporan" element={<Laporan />} />
                   <Route path="/produk" element={<ProductsPage />} />
+                  <Route path="/paket" element={<PackagesPage />} />
                   <Route path="/kategori" element={<CategoriesPage />} />
                   <Route path="/supplier" element={<SuppliersPage />} />
                   <Route path="/riwayat" element={<Riwayat />} />
                   <Route path="/profil" element={<Profile />} />
-                  <Route path="/reset-password" element={<ResetPassword />} />
-                  
+                  <Route path="/paket" element={<PackagesPage />} />
+                  <Route path="/paket/buat" element={<BuatPaket />} />
+                  <Route path="/paket/:id/ubah" element={<BuatPaket />} />      
+                  <Route path="/pembelian-paket" element={<PembelianPaket />} />
+                  <Route path="/kalender" element={<Kalender />} />
 
                   <Route
                     path="/pembayaran"

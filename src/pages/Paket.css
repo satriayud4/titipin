@@ -1,0 +1,45 @@
+.pk { max-width: 1100px; }
+
+.pk-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 16px; }
+.pk-toolbar .search { flex: 1 1 240px; max-width: 360px; }
+.pk-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.pk-count { margin-left: 4px; opacity: 0.65; font-variant-numeric: tabular-nums; }
+
+.pk-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); align-items: start; }
+
+.pk-card {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.pk-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.pk-card.off { opacity: 0.72; }
+
+.pk-head { display: flex; align-items: flex-start; gap: 12px; }
+.pk-icon {
+  display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 12px;
+  background: var(--primary-soft); color: var(--primary);
+}
+.pk-title { display: grid; gap: 4px; min-width: 0; justify-items: start; }
+.pk-title h2 { margin: 0; font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
+
+.pk-desc {
+  margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.pk-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.pk-price strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.pk-price > span:not(.badge) { color: var(--muted); font-size: 0.85rem; }
+.pk-price s { color: var(--muted); font-size: 0.88rem; }
+
+.pk-items { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.pk-items-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.pk-items ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.pk-items li { display: flex; justify-content: space-between; gap: 10px; font-size: 0.9rem; }
+.pk-items li span { min-width: 0; overflow-wrap: anywhere; }
+.pk-items li b { flex: none; font-variant-numeric: tabular-nums; }
+.pk-more { color: var(--muted); font-size: 0.82rem; }
+
+.pk-actions { display: flex; gap: 8px; margin-top: auto; }
+.pk-actions > * { flex: 1 1 0; justify-content: center; }
