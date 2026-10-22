@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   Banknote,
   CircleCheck,
   Copy,
+  Grid2X2,
   Landmark,
+  List,
   Minus,
   Plus,
   QrCode,
@@ -17,6 +19,8 @@ import { useConfirm } from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import CartDock from '../components/CartDock'
 import EmptyState from '../components/EmptyState'
+import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
+import { useStoredState } from '../lib/prefs'
 import { imageUrl } from '../lib/image'
 import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
@@ -57,7 +61,87 @@ const METHODS: { value: Method; label: string; icon: LucideIcon }[] = [
   { value: 'qris', label: 'QRIS', icon: QrCode },
 ]
 
+/** Pilihan tampilan Kasir. Tersimpan per perangkat, jadi HP dan PC bisa berbeda. */
+const VIEW_DEFAULTS = {
+  view: 'grid', // grid | list | compact
+  size: 'm', // s | m | l
+  density: 'comfy', // comfy | tight
+  sort: 'name', // name | price-asc | price-desc | stock-desc | stock-asc
+  showImage: true,
+  showSupplier: true,
+  showStock: true,
+  cart: 'right', // right | left
+  cartWidth: 'normal', // narrow | normal | wide
+}
+
+const VIEW_GROUPS: OptionGroup[] = [
+  {
+    type: 'seg',
+    key: 'view',
+    label: 'Bentuk daftar produk',
+    choices: [
+      { value: 'grid', label: 'Kartu', icon: Grid2X2 },
+      { value: 'list', label: 'Daftar', icon: List },
+      { value: 'compact', label: 'Ringkas' },
+    ],
+  },
+  {
+    type: 'seg',
+    key: 'size',
+    label: 'Ukuran kartu',
+    choices: [
+      { value: 's', label: 'Kecil' },
+      { value: 'm', label: 'Sedang' },
+      { value: 'l', label: 'Besar' },
+    ],
+  },
+  {
+    type: 'seg',
+    key: 'density',
+    label: 'Kerapatan',
+    choices: [
+      { value: 'comfy', label: 'Lega' },
+      { value: 'tight', label: 'Padat' },
+    ],
+  },
+  {
+    type: 'seg',
+    key: 'sort',
+    label: 'Urutkan produk',
+    choices: [
+      { value: 'name', label: 'A–Z' },
+      { value: 'price-asc', label: 'Termurah' },
+      { value: 'price-desc', label: 'Termahal' },
+      { value: 'stock-desc', label: 'Stok banyak' },
+      { value: 'stock-asc', label: 'Stok sedikit' },
+    ],
+  },
+  { type: 'toggle', key: 'showImage', label: 'Tampilkan gambar' },
+  { type: 'toggle', key: 'showSupplier', label: 'Tampilkan nama supplier' },
+  { type: 'toggle', key: 'showStock', label: 'Tampilkan sisa stok' },
+  {
+    type: 'seg',
+    key: 'cart',
+    label: 'Posisi keranjang (layar lebar)',
+    choices: [
+      { value: 'right', label: 'Kanan' },
+      { value: 'left', label: 'Kiri' },
+    ],
+  },
+  {
+    type: 'seg',
+    key: 'cartWidth',
+    label: 'Lebar keranjang (layar lebar)',
+    choices: [
+      { value: 'narrow', label: 'Sempit' },
+      { value: 'normal', label: 'Normal' },
+      { value: 'wide', label: 'Lebar' },
+    ],
+  },
+]
+
 export default function Pos() {
+  const [prefs, setPrefs, resetPrefs] = useStoredState('titipin:kasir:tampilan:v1', VIEW_DEFAULTS)
   const notify = useToast()
   const confirm = useConfirm()
   const [items, setItems] = useState<Item[]>([])
@@ -156,7 +240,20 @@ export default function Pos() {
       if (cat && String(p.category_id) !== cat) return false
       return true
     })
-    .sort((a, b) => nameOf(a.product_id).localeCompare(nameOf(b.product_id)))
+    .sort((a, b) => {
+      switch (prefs.sort) {
+        case 'price-asc':
+          return a.sell_price - b.sell_price || nameOf(a.product_id).localeCompare(nameOf(b.product_id))
+        case 'price-desc':
+          return b.sell_price - a.sell_price || nameOf(a.product_id).localeCompare(nameOf(b.product_id))
+        case 'stock-desc':
+          return b.qty_remaining - a.qty_remaining || nameOf(a.product_id).localeCompare(nameOf(b.product_id))
+        case 'stock-asc':
+          return a.qty_remaining - b.qty_remaining || nameOf(a.product_id).localeCompare(nameOf(b.product_id))
+        default:
+          return nameOf(a.product_id).localeCompare(nameOf(b.product_id))
+      }
+    })
 
   async function clearCart() {
     const ok = await confirm({ title: 'Kosongkan keranjang?', message: 'Semua barang di keranjang akan dihapus.', confirmText: 'Ya, kosongkan', tone: 'danger' })
@@ -307,13 +404,19 @@ export default function Pos() {
   )
 
   return (
-    <div className="pos">
+    <div className="pos" data-cart={prefs.cart} data-cartw={prefs.cartWidth} data-density={prefs.density}>
       <div className="pos-main">
-        <div className="toolbar" style={{ marginBottom: 0 }}>
+        <div className="toolbar pos-toolbar" style={{ marginBottom: 0 }}>
           <div className="search" style={{ maxWidth: 'none' }}>
             <Search size={18} />
             <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          <ViewOptions
+            groups={VIEW_GROUPS}
+            values={prefs}
+            onChange={(key, value) => setPrefs({ [key]: value } as Partial<typeof prefs>)}
+            onReset={resetPrefs}
+          />
         </div>
         <div className="pills-scroll">
           <button type="button" className={`pill${cat === '' ? ' on' : ''}`} onClick={() => setCat('')}>Semua</button>
@@ -325,7 +428,7 @@ export default function Pos() {
         </div>
 
         {loading ? (
-          <div className="pos-grid">
+          <div className="pos-grid" data-view={prefs.view} data-size={prefs.size}>
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="skeleton" style={{ height: 210, borderRadius: 14 }} />
             ))}
@@ -335,8 +438,8 @@ export default function Pos() {
         ) : visible.length === 0 ? (
           <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian atau pilih kategori lain." />
         ) : (
-          <div className="pos-grid">
-            {visible.map((it) => {
+          <div className="pos-grid" data-view={prefs.view} data-size={prefs.size} data-img={prefs.showImage ? 'on' : 'off'}>
+            {visible.map((it, index) => {
               const p = products.get(it.product_id)
               const inCart = cart[it.batch_id] ?? 0
               const left = it.qty_remaining - inCart
@@ -346,6 +449,7 @@ export default function Pos() {
                   key={it.batch_id}
                   type="button"
                   className={`tile${inCart > 0 ? ' in-cart' : ''}`}
+                  style={{ '--i': Math.min(index, 14) } as CSSProperties}
                   onClick={() => add(it.batch_id)}
                   disabled={full}
                   aria-label={`Tambah ${p?.name ?? 'produk'}`}
@@ -355,10 +459,12 @@ export default function Pos() {
                   {inCart > 0 && <span className="tile-qty">{inCart}</span>}
                   <span className="tile-body">
                     <span className="tile-name">{p?.name}</span>
-                    <span className="tile-sup">{suppliers.get(it.supplier_id) ?? '-'}</span>
-                    <span className={`badge ${full ? 'badge-muted' : left <= LOW_STOCK ? 'badge-warning' : 'badge-success'}`}>
-                      {full ? 'Maks. di keranjang' : `Sisa ${left}`}
-                    </span>
+                    {prefs.showSupplier && <span className="tile-sup">{suppliers.get(it.supplier_id) ?? '-'}</span>}
+                    {(prefs.showStock || full) && (
+                      <span className={`badge ${full ? 'badge-muted' : left <= LOW_STOCK ? 'badge-warning' : 'badge-success'}`}>
+                        {full ? 'Maks. di keranjang' : `Sisa ${left}`}
+                      </span>
+                    )}
                   </span>
                 </button>
               )
