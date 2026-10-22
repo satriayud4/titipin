@@ -3,7 +3,6 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CircleAlert,
-  LockKeyhole,
   CheckCircle2,
   Eye,
   EyeOff,
