@@ -688,7 +688,7 @@ const discountAmount =
                         padding: 0,
                         borderRadius: 13,
                         border: `1px solid ${isSelected ? 'var(--success)' : 'var(--border)'}`,
-                        background: isSelected ? 'var(--surface-secondary)' : 'var(--surface)',
+                        background: isSelected ? 'var(--primary-soft)' : 'var(--surface)',
                         cursor: 'pointer',
                         position: 'relative',
                       }}
@@ -712,7 +712,7 @@ const discountAmount =
                             placeItems: 'center',
                             width: view === 'list' ? 68 : '100%',
                             height: view === 'list' ? 68 : cardSize === 'small' ? 92 : cardSize === 'large' ? 170 : 125,
-                            background: 'var(--surface-secondary)',
+                            background: 'var(--surface-2)',
                             flexShrink: 0,
                           }}
                         >
@@ -915,7 +915,7 @@ const discountAmount =
               gap: 9,
               padding: 13,
               borderRadius: 12,
-              background: 'var(--surface-secondary)',
+              background: 'var(--surface-2)',
             }}
           >
             <div className="sum-row">

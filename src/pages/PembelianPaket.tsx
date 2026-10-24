@@ -642,31 +642,39 @@ const message = [
 .pp-select-menu {
   position: absolute; z-index: 50; top: calc(100% + 9px); left: 0; right: 0;
   max-height: 260px; overflow-y: auto; padding: 6px;
-  border: 1px solid #344b3f; border-radius: 14px;
-  background: #111e18; color: #e8f0eb;
-  box-shadow: 0 18px 55px rgba(0,0,0,.38);
+  border: 1px solid var(--purchase-line); border-radius: 14px;
+  background: var(--purchase-panel); color: var(--purchase-text);
+  box-shadow: var(--pp-pop);
   transform-origin: top left; animation: purchase-pop .24s var(--pp-ease);
 }
 .pp-select-option {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   width: 100%; padding: 10px 12px; border: 0; border-radius: 10px;
-  background: transparent; color: #dce8e0; font-size: 13px;
+  background: transparent; color: var(--purchase-text); font-size: 13px;
   text-align: left; cursor: pointer;
 }
-.pp-select-option:hover { background: #263b2f; }
-.pp-select-option.is-active { background: #1d3026; color: #8fc9a9; font-weight: 600; }
+.pp-select-option:hover { background: var(--purchase-panel-soft); }
+.pp-select-option.is-active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 .pp-select-option svg { flex-shrink: 0; }
-.pp-select-empty { margin: 0; padding: 10px 12px; font-size: 13px; color: #8ea397; }
+.pp-select-empty { margin: 0; padding: 10px 12px; font-size: 13px; color: var(--purchase-muted); }
 
 
 
         /* ───────── Token ───────── */
         .purchase-page {
-          --purchase-panel: var(--surface, #111d18);
-          --purchase-panel-soft: var(--surface-secondary, #17251f);
-          --purchase-line: var(--border, #2a3b33);
-          --purchase-text: var(--text, #e8f0eb);
-          --purchase-muted: var(--muted, #9aaba2);
+          --purchase-panel: var(--surface);
+          --purchase-panel-soft: var(--surface-2);
+          --purchase-line: var(--border);
+          --purchase-text: var(--text);
+          --purchase-muted: var(--muted);
+          --pp-accent: var(--primary);
+          --pp-line-strong: color-mix(in srgb, var(--primary) 45%, var(--border));
+          --pp-a06: color-mix(in srgb, var(--primary) 6%, transparent);
+          --pp-a10: color-mix(in srgb, var(--primary) 10%, transparent);
+          --pp-a14: color-mix(in srgb, var(--primary) 16%, transparent);
+          --pp-a45: color-mix(in srgb, var(--primary) 45%, transparent);
+          --pp-faint: color-mix(in srgb, var(--muted) 55%, transparent);
+          --pp-pop: var(--shadow-md);
           --pp-ease: cubic-bezier(.22, 1, .36, 1);
           --pp-spring: cubic-bezier(.34, 1.56, .64, 1);
           -webkit-tap-highlight-color: transparent;
@@ -689,25 +697,25 @@ const message = [
         .purchase-page .card {
           border: 1px solid var(--purchase-line);
           border-radius: 18px;
-          box-shadow: 0 8px 26px rgba(0,0,0,.08);
+          box-shadow: var(--shadow-sm);
           transition: box-shadow .3s var(--pp-ease), border-color .3s var(--pp-ease);
         }
-        .purchase-page .card:hover { border-color: #34483e; box-shadow: 0 14px 38px rgba(0,0,0,.14); }
+        .purchase-page .card:hover { border-color: var(--pp-line-strong); box-shadow: var(--shadow-md); }
         .purchase-page .card h2 { letter-spacing: -.01em; }
 
         /* ───────── Input & select ───────── */
         .purchase-page input:not([type=checkbox]), .purchase-page select {
           min-height: 44px; border-radius: 12px; border: 1px solid var(--purchase-line);
           background-color: var(--purchase-panel); color: var(--purchase-text);
-          padding: 10px 13px; outline: none; color-scheme: dark;
+          padding: 10px 13px; outline: none;
           transition: border-color .2s var(--pp-ease), box-shadow .2s var(--pp-ease), background .2s var(--pp-ease), transform .2s var(--pp-ease);
         }
-        .purchase-page input:not([type=checkbox]):hover:not(:disabled), .purchase-page select:hover { border-color: #3f5a4b; }
-        .purchase-page input:not([type=checkbox]):focus, .purchase-page select:focus { border-color: #75b99a; box-shadow: 0 0 0 4px rgba(117,185,154,.14); }
+        .purchase-page input:not([type=checkbox]):hover:not(:disabled), .purchase-page select:hover { border-color: var(--pp-line-strong); }
+        .purchase-page input:not([type=checkbox]):focus, .purchase-page select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px var(--pp-a14); }
         .purchase-page input:disabled { cursor: not-allowed; }
         .purchase-page select { cursor: pointer; padding-right: 38px; }
-        .purchase-page select option { background: #14211b; color: #e8f0eb; padding: 10px; }
-        .purchase-page input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; accent-color: #75b99a; cursor: pointer; transition: transform .2s var(--pp-spring); }
+        .purchase-page select option { background: var(--purchase-panel); color: var(--purchase-text); padding: 10px; }
+        .purchase-page input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--primary); cursor: pointer; transition: transform .2s var(--pp-spring); }
         .purchase-page input[type=checkbox]:active:not(:disabled) { transform: scale(.82); }
         .purchase-page input[type=checkbox]:disabled { cursor: not-allowed; }
         .pp-count::-webkit-outer-spin-button, .pp-count::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -715,83 +723,77 @@ const message = [
 
         /* ───────── Tombol ───────── */
         .purchase-page button { transition: transform .22s var(--pp-ease), border-color .2s var(--pp-ease), background .2s var(--pp-ease), box-shadow .2s var(--pp-ease), opacity .2s var(--pp-ease); -webkit-user-select: none; user-select: none; }
-        .purchase-page button:focus-visible { outline: 2px solid #75b99a; outline-offset: 3px; }
+        .purchase-page button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
         .purchase-page button:disabled { cursor: not-allowed; }
         .purchase-page .btn { cursor: pointer; }
-        .purchase-page .btn:hover:not(:disabled) { transform: translateY(-1px); border-color: #527663; box-shadow: 0 6px 16px rgba(0,0,0,.18); }
-        .purchase-page .btn:active:not(:disabled) { transform: translateY(0) scale(.96); box-shadow: 0 1px 4px rgba(0,0,0,.2); transition-duration: .08s; }
-        .purchase-page .btn[aria-pressed=true] { border-color: #75b99a; background: var(--purchase-panel-soft); box-shadow: inset 0 0 0 1px rgba(117,185,154,.45); }
+        .purchase-page .btn:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--pp-line-strong); box-shadow: var(--shadow-sm); }
+        .purchase-page .btn:active:not(:disabled) { transform: translateY(0) scale(.96); box-shadow: none; transition-duration: .08s; }
+        .purchase-page .btn[aria-pressed=true] { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--pp-a45); }
         .purchase-page .btn svg { transition: transform .35s var(--pp-ease); }
         .purchase-page .btn:hover:not(:disabled) svg { transform: scale(1.1); }
         .pp-refresh:hover:not(:disabled) svg { transform: rotate(180deg) !important; }
 
-        /* ───────── Scrollbar ───────── */
-        .purchase-page ::-webkit-scrollbar { width: 9px; height: 9px; }
-        .purchase-page ::-webkit-scrollbar-track { background: transparent; }
-        .purchase-page ::-webkit-scrollbar-thumb { background: #34483e; border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
-        .purchase-page ::-webkit-scrollbar-thumb:hover { background: #50695b; border: 2px solid transparent; background-clip: padding-box; }
-
         /* ───────── Skeleton loading ───────── */
         .pp-skeleton { display: grid; gap: 14px; }
-        .pp-skeleton span { display: block; height: 16px; border-radius: 8px; background: linear-gradient(90deg, var(--purchase-panel-soft) 0%, #1f3228 50%, var(--purchase-panel-soft) 100%); background-size: 840px 100%; animation: pp-shimmer 1.4s linear infinite; }
+        .pp-skeleton span { display: block; height: 16px; border-radius: 8px; background: linear-gradient(90deg, var(--purchase-panel-soft) 0%, color-mix(in srgb, var(--primary) 10%, var(--purchase-panel-soft)) 50%, var(--purchase-panel-soft) 100%); background-size: 840px 100%; animation: pp-shimmer 1.4s linear infinite; }
         .pp-spinner { display: inline-block; animation: pp-spin 1s linear infinite; }
 
         /* ───────── Tanggal & kalender ───────── */
         .purchase-date-field { position: relative; min-width: 0; }
         .purchase-field-label { display: block; margin-bottom: 8px; }
         .purchase-date-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 11px 13px; border: 1px solid var(--purchase-line); border-radius: 13px; color: var(--purchase-text); background: linear-gradient(135deg, var(--purchase-panel-soft), var(--purchase-panel)); text-align: left; cursor: pointer; }
-        .purchase-date-trigger:hover { border-color: #527663; box-shadow: 0 8px 22px rgba(0,0,0,.16); transform: translateY(-1px); }
+        .purchase-date-trigger:hover { border-color: var(--pp-line-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
         .purchase-date-trigger:active { transform: scale(.985); transition-duration: .08s; }
-        .purchase-date-trigger[aria-expanded=true] { border-color: #75b99a; box-shadow: 0 0 0 4px rgba(117,185,154,.14); }
-        .purchase-date-trigger > svg:first-child { flex-shrink: 0; color: #8fc9a9; transition: transform .35s var(--pp-spring); }
+        .purchase-date-trigger[aria-expanded=true] { border-color: var(--primary); box-shadow: 0 0 0 4px var(--pp-a14); }
+        .purchase-date-trigger > svg:first-child { flex-shrink: 0; color: var(--primary); transition: transform .35s var(--pp-spring); }
         .purchase-date-trigger:hover > svg:first-child { transform: scale(1.12) rotate(-6deg); }
         .purchase-date-copy { display: grid; gap: 4px; flex: 1; min-width: 0; }
         .purchase-date-copy strong { font-size: 13px; font-weight: 600; }
         .purchase-date-copy small { color: var(--purchase-muted); font-size: 11px; }
         .purchase-date-arrow { color: var(--purchase-muted); transition: transform .3s var(--pp-ease); }
         .purchase-date-trigger[aria-expanded=true] .purchase-date-arrow { transform: rotate(90deg); }
-        .purchase-calendar { position: absolute; z-index: 50; top: calc(100% + 9px); left: 0; width: min(330px, calc(100vw - 56px)); padding: 15px; border: 1px solid #344b3f; border-radius: 17px; background: #111e18; color: #e8f0eb; box-shadow: 0 18px 55px rgba(0,0,0,.38); transform-origin: top left; animation: purchase-pop .24s var(--pp-ease); }
+        .purchase-calendar { position: absolute; z-index: 50; top: calc(100% + 9px); left: 0; width: min(330px, calc(100vw - 56px)); padding: 15px; border: 1px solid var(--purchase-line); border-radius: 17px; background: var(--purchase-panel); color: var(--purchase-text); box-shadow: var(--pp-pop); transform-origin: top left; animation: purchase-pop .24s var(--pp-ease); }
         .purchase-calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
         .purchase-calendar-head > div:first-child { display: grid; gap: 4px; }
         .purchase-calendar-head strong { font-size: 15px; }
-        .purchase-calendar-head small { color: #91a59a; font-size: 11px; }
+        .purchase-calendar-head small { color: var(--purchase-muted); font-size: 11px; }
         .purchase-calendar-nav { display: flex; gap: 6px; }
-        .purchase-calendar-nav button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #30443a; border-radius: 9px; color: #e8f0eb; background: #192820; cursor: pointer; }
-        .purchase-calendar-nav button:hover { background: #263b2f; transform: translateY(-1px); }
+        .purchase-calendar-nav button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--purchase-line); border-radius: 9px; color: var(--purchase-text); background: var(--purchase-panel-soft); cursor: pointer; }
+        .purchase-calendar-nav button:hover { background: var(--primary-soft); border-color: var(--pp-line-strong); transform: translateY(-1px); }
         .purchase-calendar-nav button:active { transform: scale(.9); transition-duration: .08s; }
         .purchase-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
         .purchase-calendar-weekdays { margin-bottom: 7px; }
-        .purchase-calendar-weekdays span { display: grid; place-items: center; height: 25px; color: #8ea397; font-size: 10px; font-weight: 700; }
-        .purchase-calendar-day { display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #dce8e0; font-size: 12px; cursor: pointer; font-variant-numeric: tabular-nums; }
-        .purchase-calendar-day:hover:not(:disabled) { background: #263b2f; border-color: #3b5a47; transform: scale(1.1); }
+        .purchase-calendar-weekdays span { display: grid; place-items: center; height: 25px; color: var(--purchase-muted); font-size: 10px; font-weight: 700; }
+        .purchase-calendar-day { display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--purchase-text); font-size: 12px; cursor: pointer; font-variant-numeric: tabular-nums; }
+        .purchase-calendar-day:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--pp-line-strong); transform: scale(1.1); }
         .purchase-calendar-day:active:not(:disabled) { transform: scale(.9); transition-duration: .08s; }
-        .purchase-calendar-day.outside { color: #64766b; }
-        .purchase-calendar-day.today { border-color: #6da886; }
-        .purchase-calendar-day.selected { background: #8fc9a9; color: #102017; border-color: #8fc9a9; font-weight: 800; box-shadow: 0 4px 14px rgba(143,201,169,.35); animation: pp-pop .32s var(--pp-spring); }
-        .purchase-calendar-day:disabled { color: #46564c; cursor: not-allowed; }
-        .purchase-calendar-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #293c31; }
-        .purchase-calendar-foot button { border: 0; background: transparent; color: #9ecfb2; font-size: 12px; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
-        .purchase-calendar-foot button:hover { color: #d7f2e0; background: #192820; }
+        .purchase-calendar-day.outside { color: var(--pp-faint); }
+        .purchase-calendar-day.today { border-color: var(--primary); }
+        .purchase-calendar-day.selected { background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 800; box-shadow: 0 4px 14px var(--pp-a45); animation: pp-pop .32s var(--pp-spring); }
+        .purchase-calendar-day:disabled { color: var(--pp-faint); opacity: .55; cursor: not-allowed; }
+        .purchase-calendar-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--purchase-line); }
+        .purchase-calendar-foot button { border: 0; background: transparent; color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+        .purchase-calendar-foot button:hover { background: var(--primary-soft); }
         .purchase-calendar-foot button:active { transform: scale(.94); transition-duration: .08s; }
 
         /* ───────── Tile produk ───────── */
         .pp-tile { cursor: pointer; }
-        .pp-tile:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(0,0,0,.2); }
-        .pp-tile:active:not(:disabled) { transform: scale(.975); box-shadow: 0 2px 8px rgba(0,0,0,.2); transition-duration: .08s; }
-        .pp-tile.is-selected { box-shadow: 0 0 0 3px rgba(117,185,154,.13), 0 8px 22px rgba(0,0,0,.16); }
+        .pp-tile:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .pp-tile:active:not(:disabled) { transform: scale(.975); box-shadow: var(--shadow-sm); transition-duration: .08s; }
+        .pp-tile.is-selected { box-shadow: 0 0 0 3px var(--pp-a14); }
         .pp-tile:disabled { opacity: .5; }
         .pp-tile-icon { transition: background .25s var(--pp-ease), transform .3s var(--pp-spring); }
         .pp-tile:hover:not(:disabled) .pp-tile-icon { transform: scale(1.06); }
         .pp-tile-icon svg { display: block; }
 
         /* ───────── Panel alokasi & rekap ───────── */
-        .pp-panel { border: 1px solid var(--border, #2b3934); border-radius: 14px; transition: border-color .3s var(--pp-ease), box-shadow .3s var(--pp-ease); }
-        .pp-panel:hover { border-color: #3f5a4b; }
-        .pp-panel.is-done { border-color: rgba(101,201,149,.5); box-shadow: 0 0 0 3px rgba(101,201,149,.08); }
+        .pp-panel { border: 1px solid var(--border); border-radius: 14px; transition: border-color .3s var(--pp-ease), box-shadow .3s var(--pp-ease); }
+        .pp-panel:hover { border-color: var(--pp-line-strong); }
+        .pp-panel.is-done { border-color: color-mix(in srgb, var(--success) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 10%, transparent); }
 
         .pp-supplier-row { padding: 8px 10px; margin: 0 -10px; border-radius: 12px; transition: background .25s var(--pp-ease); }
-        .pp-supplier-row:hover:not(.is-off) { background: rgba(117,185,154,.06); }
-        .pp-supplier-row.is-on { background: rgba(117,185,154,.1); }
+        .pp-supplier-row:hover:not(.is-off) { background: var(--pp-a06); }
+        .pp-supplier-row.is-on { background: var(--pp-a10); }
         .pp-supplier-row input[type=number] { transition: border-color .2s var(--pp-ease), box-shadow .2s var(--pp-ease), background .2s var(--pp-ease); font-variant-numeric: tabular-nums; }
 
         .pp-bar { position: relative; height: 6px; border-radius: 999px; overflow: hidden; background: var(--purchase-panel-soft); }
@@ -809,7 +811,7 @@ const message = [
         .pp-toggle[aria-expanded=true] .pp-chev svg { transform: rotate(90deg); }
 
         .pp-summary-card { transition: transform .3s var(--pp-ease), box-shadow .3s var(--pp-ease), border-color .3s var(--pp-ease); }
-        .pp-summary-card:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,0,0,.18); }
+        .pp-summary-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
         @media (max-width: 640px) { .purchase-page .card { border-radius: 15px; } .purchase-calendar { left: 0; } }
 
@@ -1237,10 +1239,10 @@ const message = [
                               padding: view === 'comfortable' ? 14 : 9,
                               borderRadius: 12,
                               border: selected
-                                ? '1px solid var(--accent, #69c49a)'
-                                : '1px solid var(--border, #2b3934)',
+                                ? '1px solid var(--primary)'
+                                : '1px solid var(--border)',
                               background: selected
-                                ? 'var(--surface-secondary, #1b2923)'
+                                ? 'var(--surface-2)'
                                 : 'transparent',
                               color: 'inherit',
                               minWidth: 0,
@@ -1256,7 +1258,7 @@ const message = [
                               height: 38,
                               flexShrink: 0,
                               borderRadius: 10,
-                              background: 'var(--surface-secondary, #1b2923)',
+                              background: 'var(--surface-2)',
                             }}
                           >
                             {selected ? (
@@ -1300,7 +1302,7 @@ const message = [
                     justifyContent: 'space-between',
                     marginTop: 16,
                     paddingTop: 12,
-                    borderTop: '1px solid var(--border, #2b3934)',
+                    borderTop: '1px solid var(--border)',
                   }}
                 >
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1397,10 +1399,10 @@ const message = [
                             ? Math.min(100, (allocated / need.quantity) * 100)
                             : 0
                         const barColor = complete
-                          ? 'var(--success, #65c995)'
+                          ? 'var(--success)'
                           : difference < 0
-                            ? 'var(--warning, #e8b65c)'
-                            : 'var(--accent, #69c49a)'
+                            ? 'var(--warning)'
+                            : 'var(--primary)'
                         const statusText = complete
                           ? 'Terpenuhi'
                           : difference > 0
@@ -1580,7 +1582,7 @@ const message = [
 
                             <div
                               style={{
-                                borderTop: '1px solid var(--border, #2b3934)',
+                                borderTop: '1px solid var(--border)',
                                 paddingTop: 10,
                                 display: 'flex',
                                 justifyContent: 'space-between',
@@ -1602,8 +1604,8 @@ const message = [
                                   alignItems: 'center',
                                   gap: 5,
                                   color: complete
-                                    ? 'var(--success, #65c995)'
-                                    : 'var(--warning, #e8b65c)',
+                                    ? 'var(--success)'
+                                    : 'var(--warning)',
                                 }}
                               >
                                 {complete ? (
@@ -1844,7 +1846,7 @@ const message = [
                     <p
                       className="pp-fade"
                       style={{
-                        color: 'var(--warning, #e8b65c)',
+                        color: 'var(--warning)',
                         fontSize: 13,
                         marginBottom: 0,
                       }}
@@ -1861,7 +1863,7 @@ const message = [
                     <p
                       className="pp-fade"
                       style={{
-                        color: 'var(--warning, #e8b65c)',
+                        color: 'var(--warning)',
                         fontSize: 13,
                         marginBottom: 0,
                       }}

@@ -30,6 +30,9 @@
   --ring: color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
+/* nama variabel lama yang dipakai beberapa halaman: diarahkan ke token tema agar mode terang & gelap sama-sama benar */
+:root { --text-muted: var(--muted); --surface-secondary: var(--surface-2); --accent: var(--primary); --card-bg: var(--surface); }
+
 @media (max-width: 899.98px) {
   :root { --tabbar-h: 78px; }
 }
