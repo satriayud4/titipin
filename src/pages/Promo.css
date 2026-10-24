@@ -1,0 +1,48 @@
+/* ===== Halaman Promo Expired ===== */
+.promo { display: grid; gap: 0; }
+.promo-form { display: grid; gap: 18px; }
+.promo-step { display: grid; gap: 10px; min-width: 0; }
+.promo-step > strong { font-size: 0.95rem; }
+.promo-narrow { max-width: 220px; }
+
+.promo-chip {
+  min-height: 36px; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 0.85rem;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--border); box-shadow: none;
+}
+.promo-chip.on { background: var(--primary); color: var(--on-primary, #fff); border-color: transparent; }
+
+.promo-all { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.88rem; }
+.promo-list { display: grid; gap: 8px; max-height: 340px; overflow: auto; padding-right: 2px; }
+.promo-pick {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+}
+.promo-pick.on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.promo-pick input { flex: none; width: 18px; height: 18px; }
+.promo-pick-main { flex: 1; min-width: 0; }
+.promo-pick-main strong { display: block; overflow-wrap: anywhere; }
+.promo-pick-main small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.promo-neg { color: var(--danger); font-weight: 700; }
+
+.promo-cards { display: grid; gap: 14px; }
+.promo-card {
+  display: grid; gap: 12px; padding: 14px; border-radius: 16px; min-width: 0;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.promo-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.promo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.promo-stats > div { padding: 8px 10px; border-radius: 12px; background: var(--surface-2); display: grid; gap: 2px; }
+.promo-stats span { color: var(--muted); font-size: 0.75rem; font-weight: 600; }
+.promo-stats b { font-size: 0.95rem; }
+
+/* ===== Penanda promo di Kasir ===== */
+.tile-price s, .cl s { opacity: 0.65; font-weight: 500; margin-right: 4px; font-size: 0.85em; }
+.tile-promo {
+  position: absolute; top: 8px; left: 8px; z-index: 2; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 800; background: var(--danger); color: var(--on-danger, #fff);
+}
+
+/* ===== Catatan promo di rincian setoran ===== */
+.promo-note { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--warning-soft); color: var(--text); }
+.promo-note strong { color: var(--warning); }
+.promo-note p { margin: 0; font-size: 0.85rem; overflow-wrap: anywhere; }

@@ -240,3 +240,59 @@ export function staffHue(name: string) {
   return HUES[h % HUES.length]
 }
 export const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
+
+/* ---------- Status setoran supplier & barang expired (dari fungsi calendar_setoran / calendar_expired) ---------- */
+export interface SetoranRow {
+  supplier_id: number
+  supplier_name: string
+  tgl: string
+  payable: number
+  paid: number
+}
+export interface ExpiredRow {
+  batch_id: number
+  expired_date: string
+  product_name: string
+  supplier_name: string
+  qty_in: number
+  qty_sold: number
+  qty_retur: number
+  qty_rusak: number
+  qty_remaining: number
+  on_promo: boolean
+}
+
+/** Setoran satu supplier pada satu hari: lunas, belum dibayar, atau kurang bayar. */
+export function setoranTag(r: SetoranRow, today: string): { tone: Tone; label: string } {
+  const sisa = r.payable - r.paid
+  const late = r.tgl < today
+  if (r.payable > 0 && r.paid === 0) return { tone: late ? 'danger' : 'warning', label: 'Belum dibayar' }
+  if (sisa > 0) return { tone: late ? 'danger' : 'warning', label: `Kurang ${sisa.toLocaleString('id-ID')}` }
+  if (sisa < 0) return { tone: 'info', label: 'Lebih bayar' }
+  return { tone: 'success', label: 'Sudah dibayar' }
+}
+
+/** Ringkasan setoran satu hari untuk kotak kalender. null = tidak ada setoran di hari itu. */
+export function setoranDaySummary(rows: SetoranRow[] | undefined, date: string, today: string) {
+  if (!rows || rows.length === 0) return null
+  const unpaid = rows.filter((r) => r.payable - r.paid > 0).length
+  const tone: Tone = unpaid === 0 ? 'success' : date < today ? 'danger' : 'warning'
+  return { tone, unpaid, total: rows.length }
+}
+
+/** Status satu stok yang expired: sudah habis, mau expired, atau sudah lewat dan perlu diretur. */
+export function expiredTag(r: ExpiredRow, today: string): { tone: Tone; label: string } {
+  if (r.qty_remaining <= 0) return { tone: 'success', label: 'Selesai' }
+  if (r.expired_date < today) return { tone: 'danger', label: 'Expired, perlu retur' }
+  if (r.expired_date === today) return { tone: 'danger', label: 'Expired hari ini' }
+  const d = diffDays(today, r.expired_date)
+  return { tone: d === 1 ? 'warning' : 'info', label: d === 1 ? 'Expired besok' : `Expired ${d} hari lagi` }
+}
+
+/** Ringkasan expired satu hari untuk kotak kalender. count = jumlah stok yang masih ada sisa. */
+export function expiredDaySummary(rows: ExpiredRow[] | undefined, today: string) {
+  if (!rows || rows.length === 0) return null
+  const left = rows.filter((r) => r.qty_remaining > 0)
+  const tone: Tone = left.length === 0 ? 'success' : left.some((r) => r.expired_date <= today) ? 'danger' : 'warning'
+  return { tone, count: left.length, total: rows.length }
+}

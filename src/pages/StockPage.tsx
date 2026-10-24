@@ -83,7 +83,7 @@ export default function StockPage() {
   const today = todayWIB()
   const nameOf = (b: Batch) => products.get(b.product_id)?.name ?? '-'
   const supplierOf = (b: Batch) => suppliers.get(b.supplier_id) ?? '-'
-  const isSelling = (b: Batch) => b.sellable_until >= today && b.received_date <= today
+  const isSelling = (b: Batch) => b.sellable_until >= today
   const isWaiting = (b: Batch) => b.sellable_until < today
   const isLow = (b: Batch) => isSelling(b) && b.qty_remaining <= LOW_STOCK
 

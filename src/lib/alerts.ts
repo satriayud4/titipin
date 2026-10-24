@@ -72,7 +72,7 @@ export function useAlerts(refreshKey: string) {
 
       // stok menipis (barang yang masih boleh dijual hari ini)
       rows
-        .filter((x) => x.received_date <= today && x.sellable_until >= today && x.qty_remaining <= LOW_STOCK)
+        .filter((x) => x.sellable_until >= today && x.qty_remaining <= LOW_STOCK)
         .slice(0, 5)
         .forEach((x, i) =>
           list.push({
@@ -85,14 +85,14 @@ export function useAlerts(refreshKey: string) {
         )
 
       // barang yang expired hari ini atau besok: segera retur sebelum lewat tanggalnya
-      const soon = rows.filter((x) => x.received_date <= today && x.sellable_until >= today && x.sellable_until <= addDays(today, 1))
+      const soon = rows.filter((x) => x.sellable_until >= today && x.sellable_until <= addDays(today, 1))
       if (soon.length > 0) {
         list.push({
           id: 'expired-soon',
           kind: 'warning',
           title: `${soon.reduce((n, x) => n + x.qty_remaining, 0)} barang segera expired`,
-          detail: 'Expired hari ini atau besok. Retur sebelum lewat tanggalnya.',
-          to: '/retur',
+          detail: 'Expired hari ini atau besok. Beri promo atau retur sebelum lewat tanggalnya.',
+          to: '/promo',
         })
       }
 

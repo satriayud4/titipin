@@ -26,6 +26,7 @@ import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
 import { todayWIB } from '../lib/dates'
 import { LOW_STOCK } from '../lib/alerts'
+import './Promo.css'
 
 interface Item {
   batch_id: number
@@ -140,6 +141,26 @@ const VIEW_GROUPS: OptionGroup[] = [
   },
 ]
 
+// Semua stok yang masih ada dan belum expired harus tampil di kasir.
+// Supabase membatasi 1000 baris per permintaan, jadi diambil per halaman sampai habis.
+async function fetchSellable(today: string) {
+  const PAGE = 1000
+  const rows: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('batch_stock')
+      .select('batch_id, supplier_id, product_id, qty_remaining, sell_price')
+      .gt('qty_remaining', 0)
+      .gte('sellable_until', today)
+      .order('batch_id')
+      .range(from, from + PAGE - 1)
+    if (error) return { data: null, error }
+    rows.push(...(data ?? []))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: rows, error: null }
+}
+
 export default function Pos() {
   const [prefs, setPrefs, resetPrefs] = useStoredState('titipin:kasir:tampilan:v1', VIEW_DEFAULTS)
   const notify = useToast()
@@ -149,6 +170,8 @@ export default function Pos() {
   const [suppliers, setSuppliers] = useState<Map<number, string>>(new Map())
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([])
   const [accounts, setAccounts] = useState<PayAccount[]>([])
+  // stok yang sedang promo: id stok -> harga normal sebelum diskon
+  const [promos, setPromos] = useState<Map<number, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [cart, setCart] = useState<Record<number, number>>({})
   const [search, setSearch] = useState('')
@@ -161,13 +184,8 @@ export default function Pos() {
 
   const load = useCallback(async () => {
     const today = todayWIB()
-    const [b, p, s, c, a] = await Promise.all([
-      supabase
-        .from('batch_stock')
-        .select('batch_id, supplier_id, product_id, qty_remaining, sell_price')
-        .gt('qty_remaining', 0)
-        .lte('received_date', today)
-        .gte('sellable_until', today),
+    const [b, p, s, c, a, pr] = await Promise.all([
+      fetchSellable(today),
       supabase.from('products').select('id, name, image_path, category_id'),
       supabase.from('suppliers').select('id, name'),
       supabase.from('categories').select('id, name').order('name'),
@@ -176,6 +194,7 @@ export default function Pos() {
         .select('id, type, name, account_number, account_holder, image_path')
         .eq('is_active', true)
         .order('id'),
+      supabase.from('promo_items').select('batch_id, original_price').eq('active', true),
     ])
     if (b.error) {
       notify(errText(b.error), 'error')
@@ -194,6 +213,8 @@ export default function Pos() {
     setSuppliers(new Map((s.data ?? []).map((x) => [x.id as number, x.name as string])))
     setCategories((c.data ?? []) as { id: number; name: string }[])
     setAccounts((a.data ?? []) as PayAccount[])
+    // tabel promo belum dibuat -> abaikan saja, kasir tetap jalan
+    setPromos(new Map((pr.error ? [] : pr.data ?? []).map((x) => [x.batch_id as number, x.original_price as number])))
     setLoading(false)
   }, [notify])
 
@@ -313,7 +334,9 @@ export default function Pos() {
             {img ? <img className="cl-img" src={imageUrl(img)} alt="" /> : <div className="cl-img" />}
             <div style={{ minWidth: 0 }}>
               <div className="cl-name">{nameOf(it.product_id)}</div>
-              <div className="page-sub">{suppliers.get(it.supplier_id) ?? '-'} · {rupiah(it.sell_price)}</div>
+              <div className="page-sub">
+                {suppliers.get(it.supplier_id) ?? '-'} · {(promos.get(it.batch_id) ?? 0) > it.sell_price && <s>{rupiah(promos.get(it.batch_id) ?? 0)}</s>}{rupiah(it.sell_price)}
+              </div>
               <div className="stepper">
                 <button onClick={() => setQty(it.batch_id, q - 1)} aria-label="Kurangi"><Minus size={14} /></button>
                 <b>{q}</b>
@@ -444,6 +467,8 @@ export default function Pos() {
               const inCart = cart[it.batch_id] ?? 0
               const left = it.qty_remaining - inCart
               const full = left <= 0
+              const was = promos.get(it.batch_id) ?? 0
+              const off = was > it.sell_price ? Math.round((1 - it.sell_price / was) * 100) : 0
               return (
                 <button
                   key={it.batch_id}
@@ -455,7 +480,8 @@ export default function Pos() {
                   aria-label={`Tambah ${p?.name ?? 'produk'}`}
                 >
                   {p?.image_path ? <img className="tile-img" src={imageUrl(p.image_path)} alt="" loading="lazy" /> : <span className="tile-img" />}
-                  <span className="tile-price">{rupiah(it.sell_price)}</span>
+                  {off > 0 && <span className="tile-promo">Promo -{off}%</span>}
+                  <span className="tile-price">{off > 0 && <s>{rupiah(was)}</s>}{rupiah(it.sell_price)}</span>
                   {inCart > 0 && <span className="tile-qty">{inCart}</span>}
                   <span className="tile-body">
                     <span className="tile-name">{p?.name}</span>

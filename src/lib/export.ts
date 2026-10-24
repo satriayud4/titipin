@@ -34,7 +34,15 @@ export function waNumber(phone: string | null | undefined) {
   return d.startsWith('62') && d.length >= 10 && d.length <= 15 ? d : null
 }
 
-export function waText(o: { appName: string; supplier: string; dateLabel: string; soldQty: number; payable: number; paid: number }) {
+export function waText(o: {
+  appName: string
+  supplier: string
+  dateLabel: string
+  soldQty: number
+  payable: number
+  paid: number
+  promoLines?: string[]
+}) {
   const rest = Math.max(o.payable - o.paid, 0)
   return [
     `Halo ${o.supplier}, berikut rekap setoran ${o.appName} tanggal ${o.dateLabel}.`,
@@ -43,6 +51,7 @@ export function waText(o: { appName: string; supplier: string; dateLabel: string
     `Total tagihan: ${rupiah(o.payable)}`,
     `Sudah dibayar: ${rupiah(o.paid)}`,
     rest > 0 ? `Sisa tagihan: ${rupiah(rest)}` : 'Status: Lunas',
+    ...(o.promoLines && o.promoLines.length > 0 ? ['', 'Catatan promo:', ...o.promoLines] : []),
     '',
     'Terima kasih.',
   ].join('\n')

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CalendarOff, Check, ChevronLeft, ChevronRight, Clock, ClipboardList, Pencil, Store, Users } from 'lucide-react'
+import { CalendarOff, Check, ChevronLeft, ChevronRight, Clock, ClipboardList, HandCoins, Hourglass, Pencil, Store, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from '../components/Toast'
@@ -10,6 +10,8 @@ import { DayStatusModal, HoursModal, OrderDetailModal, OrderModal } from '../com
 import { ALERTS_REFRESH_EVENT } from '../lib/alerts'
 import { addDays } from '../lib/dates'
 import { errText } from '../lib/errors'
+import { rupiah } from '../lib/format'
+import { PROMO_SQL_FILE } from '../lib/promo'
 import {
   ORDER_SOURCE,
   STATUS_LABEL,
@@ -17,6 +19,8 @@ import {
   byDueTime,
   detailsPreview,
   durationText,
+  expiredDaySummary,
+  expiredTag,
   fmtRange,
   fmtTime,
   gridRange,
@@ -27,6 +31,8 @@ import {
   nowWIB,
   orderUrgency,
   resolveDay,
+  setoranDaySummary,
+  setoranTag,
   shiftMonth,
   staffHue,
   toCashierShift,
@@ -35,6 +41,8 @@ import {
   weeklyInfo,
   type DayInfo,
   type CashierShift,
+  type ExpiredRow,
+  type SetoranRow,
   type CashierShiftRow,
   type HourRow,
   type OrderRow,
@@ -106,6 +114,8 @@ export default function Kalender() {
   const [setupNeeded, setSetupNeeded] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [modal, setModal] = useState<ModalState>(null)
+  // status setoran supplier & stok expired (dimuat terpisah supaya kalender tetap jalan bila SQL promo belum dijalankan)
+  const [fin, setFin] = useState<{ setoran: SetoranRow[]; expired: ExpiredRow[]; missing: boolean }>({ setoran: [], expired: [], missing: false })
 
   const gridRef = useRef<HTMLDivElement>(null)
   const refocus = useRef(false)
@@ -168,6 +178,26 @@ export default function Kalender() {
     }
   }, [anchor, today, reloadKey, notify])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { from, to } = gridRange(anchor)
+      const [s, x] = await Promise.all([
+        supabase.rpc('calendar_setoran', { p_from: from, p_to: to }),
+        supabase.rpc('calendar_expired', { p_from: from, p_to: to }),
+      ])
+      if (cancelled) return
+      setFin({
+        setoran: s.error ? [] : ((s.data ?? []) as SetoranRow[]),
+        expired: x.error ? [] : ((x.data ?? []) as ExpiredRow[]),
+        missing: !!(s.error || x.error),
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [anchor, reloadKey])
+
   // muat ulang saat tab kembali dibuka, supaya perubahan rekan kerja ikut terlihat
   useEffect(() => {
     const onVisible = () => document.visibilityState === 'visible' && setReloadKey((k) => k + 1)
@@ -193,6 +223,17 @@ export default function Kalender() {
     return m
   }, [data.orders])
 
+  const setoranByDay = useMemo(() => {
+    const m = new Map<string, SetoranRow[]>()
+    for (const r of fin.setoran) m.set(r.tgl, [...(m.get(r.tgl) ?? []), r])
+    return m
+  }, [fin.setoran])
+  const expiredByDay = useMemo(() => {
+    const m = new Map<string, ExpiredRow[]>()
+    for (const r of fin.expired) m.set(r.expired_date, [...(m.get(r.expired_date) ?? []), r])
+    return m
+  }, [fin.expired])
+
   const infoOf = (d: string) => resolveDay(d, hours, data.overrides)
   const todayInfo = infoOf(today)
   const todayShifts = shiftsByDay.get(today) ?? []
@@ -204,6 +245,10 @@ export default function Kalender() {
   const selShifts = shiftsByDay.get(selected) ?? []
   const selOrders = ordersByDay.get(selected) ?? []
   const selOverride = data.overrides.find((o) => o.day === selected)
+  const selSetoran = setoranByDay.get(selected) ?? []
+  const selExpired = expiredByDay.get(selected) ?? []
+  const selUnpaid = selSetoran.filter((r) => r.payable - r.paid > 0).length
+  const selExpLeft = selExpired.filter((r) => r.qty_remaining > 0)
   const stale = (s: CashierShift) => s.active && s.day !== today
 
   const attention = urgent
@@ -399,7 +444,11 @@ export default function Kalender() {
                 const rank: Record<Tone, number> = { danger: 3, warning: 2, info: 1, muted: 0, success: 0 }
                 return rank[tone] > rank[t] ? tone : t
               }, 'muted')
-              const label = `${longDate(d)}, ${info.closed ? 'tutup' : `buka ${fmtRange(info.open ?? '', info.close ?? '')}`}, ${shifts.length} shift kasir, ${live.length} pesanan paket`
+              const sDay = setoranDaySummary(setoranByDay.get(d), d, today)
+              const eDay = expiredDaySummary(expiredByDay.get(d), today)
+              const label = `${longDate(d)}, ${info.closed ? 'tutup' : `buka ${fmtRange(info.open ?? '', info.close ?? '')}`}, ${shifts.length} shift kasir, ${live.length} pesanan paket${
+                sDay ? `, setoran ${sDay.unpaid > 0 ? `${sDay.unpaid} supplier belum dibayar` : 'sudah dibayar semua'}` : ''
+              }${eDay ? `, ${eDay.count > 0 ? `${eDay.count} barang expired belum beres` : 'barang expired sudah beres'}` : ''}`
 
               return (
                 <button
@@ -432,10 +481,22 @@ export default function Kalender() {
                         <ClipboardList size={12} /> {live.length}
                       </span>
                     )}
+                    {sDay && (
+                      <span className={`kal-chip ${sDay.tone}`}>
+                        <HandCoins size={12} /> {sDay.unpaid > 0 ? sDay.unpaid : <Check size={11} />}
+                      </span>
+                    )}
+                    {eDay && (
+                      <span className={`kal-chip ${eDay.tone}`}>
+                        <Hourglass size={12} /> {eDay.count > 0 ? eDay.count : <Check size={11} />}
+                      </span>
+                    )}
                   </span>
                   <span className="kal-dots" aria-hidden="true">
                     {shifts.length > 0 && <i className="kal-dot shift" />}
                     {live.length > 0 && <i className={`kal-dot ${worst}`} />}
+                    {sDay && <i className={`kal-dot ${sDay.tone}`} />}
+                    {eDay && <i className={`kal-dot ${eDay.tone}`} />}
                   </span>
                 </button>
               )
@@ -446,6 +507,8 @@ export default function Kalender() {
             <span><i className="kal-dot shift" /> Ada shift kasir</span>
             <span><i className="kal-dot warning" /> Ada pesanan paket</span>
             <span><i className="kal-dot danger" /> Pesanan mepet</span>
+            <span><i className="kal-dot danger" /> Setoran belum dibayar / barang expired</span>
+            <span><i className="kal-dot success" /> Setoran lunas / expired sudah beres</span>
             <span><i className="kal-swatch" /> Tutup</span>
           </div>
         </section>
@@ -541,6 +604,74 @@ export default function Kalender() {
                           <Check size={18} />
                         </button>
                       )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="kal-sec">
+            <div className="kal-sec-head">
+              <h3>Setoran supplier</h3>
+              {selSetoran.length > 0 && (
+                <Link className="kal-link" to={`/setoran?tanggal=${selected}`}>Buka setoran</Link>
+              )}
+            </div>
+            {selSetoran.length === 0 ? (
+              <p className="kal-empty">
+                {fin.missing ? `Status setoran belum bisa dimuat. Jalankan file ${PROMO_SQL_FILE} di Supabase.` : selected > today ? 'Setoran muncul setelah ada barang terjual.' : 'Tidak ada setoran supplier di tanggal ini.'}
+              </p>
+            ) : (
+              <>
+                <p className="kal-empty">
+                  {selUnpaid === 0 ? <><Check size={16} /> Semua setoran sudah dibayar.</> : `${selUnpaid} dari ${selSetoran.length} supplier belum lunas.`}
+                </p>
+                <div className="kal-rows">
+                  {selSetoran.map((r) => {
+                    const t = setoranTag(r, today)
+                    return (
+                      <div className={`kal-row kal-fin ${t.tone}`} key={r.supplier_id}>
+                        <span className="kal-row-main">
+                          <strong>{r.supplier_name}</strong>
+                          <small>Tagihan {rupiah(r.payable)} · dibayar {rupiah(r.paid)}</small>
+                        </span>
+                        <Tag tone={t.tone}>{t.label}</Tag>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="kal-sec">
+            <div className="kal-sec-head">
+              <h3>Barang expired</h3>
+              {selExpLeft.length > 0 && (
+                <Link className="kal-link" to={selected >= today ? '/promo' : '/retur'}>
+                  {selected >= today ? 'Buat promo' : 'Buka retur'}
+                </Link>
+              )}
+            </div>
+            {selExpired.length === 0 ? (
+              <p className="kal-empty">
+                {fin.missing ? `Status expired belum bisa dimuat. Jalankan file ${PROMO_SQL_FILE} di Supabase.` : 'Tidak ada stok yang expired di tanggal ini.'}
+              </p>
+            ) : (
+              <div className="kal-rows">
+                {selExpired.map((r) => {
+                  const t = expiredTag(r, today)
+                  return (
+                    <div className={`kal-row kal-fin ${t.tone}`} key={r.batch_id}>
+                      <span className="kal-row-main">
+                        <strong>{r.product_name}</strong>
+                        <small>
+                          {r.supplier_name} · sisa {r.qty_remaining} dari {r.qty_in}
+                          {r.on_promo ? ' · ikut promo' : ''}
+                        </small>
+                      </span>
+                      <Tag tone={t.tone}>{t.label}</Tag>
                     </div>
                   )
                 })}

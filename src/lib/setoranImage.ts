@@ -9,6 +9,8 @@ export interface SetoranImageInput {
   payable: number
   paid: number
   payments: { amount: number; when: string; by: string }[]
+  /** Catatan promo untuk supplier (satu kalimat per baris, akan dipotong otomatis bila panjang). */
+  promoNotes?: string[]
   generatedAt: string
   logoUrl?: string | null
 }
@@ -42,6 +44,20 @@ function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number) {
   let s = text
   while (s.length > 1 && ctx.measureText(`${s}…`).width > maxW) s = s.slice(0, -1)
   return `${s}…`
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const out: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (line && ctx.measureText(next).width > maxW) {
+      out.push(line)
+      line = word
+    } else line = next
+  }
+  if (line) out.push(line)
+  return out
 }
 
 function statusOf(payable: number, paid: number) {
@@ -79,7 +95,18 @@ export async function renderSetoranImage(inp: SetoranImageInput): Promise<Blob> 
   const list = inp.rows
   const rowsH = Math.max(list.length, 1) * ROW
   const payExtra = inp.payments.length > 0 ? 36 + inp.payments.length * 22 : 0
-  const H = 216 + rowsH + 20 + BOX + payExtra + 60
+
+  // catatan promo: dipecah per baris dulu supaya tinggi gambar bisa dihitung
+  const NOTE_LH = 19
+  const measure = document.createElement('canvas').getContext('2d')
+  let noteLines: string[] = []
+  if (measure && inp.promoNotes && inp.promoNotes.length > 0) {
+    measure.font = `500 12.5px ${FONT}`
+    noteLines = inp.promoNotes.flatMap((t) => wrapText(measure, t, W - 2 * P - 28))
+  }
+  const noteExtra = noteLines.length > 0 ? 56 + noteLines.length * NOTE_LH : 0
+
+  const H = 216 + rowsH + 20 + BOX + payExtra + noteExtra + 60
 
   const canvas = document.createElement('canvas')
   canvas.width = W * SCALE
@@ -233,6 +260,23 @@ export async function renderSetoranImage(inp: SetoranImageInput): Promise<Blob> 
       ctx.font = font(500, 12.5)
       ctx.fillText(fit(ctx, `${rupiah(p.amount)}  ·  ${p.when}  ·  oleh ${p.by}`, W - 2 * P), P, y)
     }
+  }
+
+  // ---- catatan promo ----
+  if (noteLines.length > 0) {
+    y += 22
+    const boxH = 34 + noteLines.length * NOTE_LH
+    ctx.fillStyle = C.warningSoft
+    roundRect(ctx, P, y, W - 2 * P, boxH, 12)
+    ctx.fill()
+    ctx.textAlign = 'left'
+    ctx.fillStyle = C.warning
+    ctx.font = font(800, 11)
+    ctx.fillText('CATATAN PROMO', P + 14, y + 20)
+    ctx.fillStyle = C.text
+    ctx.font = font(500, 12.5)
+    noteLines.forEach((t, i) => ctx.fillText(t, P + 14, y + 40 + i * NOTE_LH))
+    y += boxH
   }
 
   // ---- kaki ----

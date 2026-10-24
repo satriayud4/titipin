@@ -28,6 +28,7 @@ import PackagesPage from './pages/PackagesPage'
 import BuatPaket from './pages/BuatPaket'
 import PembelianPaket from './pages/PembelianPaket'
 import Kalender from './pages/Kalender'
+import Promo from './pages/Promo'
 
 export default function App() {
   return (
@@ -70,6 +71,7 @@ export default function App() {
                   <Route path="/paket/:id/ubah" element={<BuatPaket />} />      
                   <Route path="/pembelian-paket" element={<PembelianPaket />} />
                   <Route path="/kalender" element={<Kalender />} />
+                  <Route path="/promo" element={<Promo />} />
 
                   <Route
                     path="/pembayaran"

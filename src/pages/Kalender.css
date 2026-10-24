@@ -234,3 +234,14 @@ div.kal-order { padding: 0; gap: 0; align-items: stretch; }
   .tl-bar, .kal-detail, .kal-status.open .kal-status-dot::after { animation: none; }
   .tl-now { transition: none; }
 }
+
+/* ===== Status setoran & expired ===== */
+.kal-chip.success { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.kal-dot.success { background: var(--success); }
+.kal-link { font-size: 0.85rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+.kal-link:hover { text-decoration: underline; }
+.kal-fin { --tone: var(--muted); border-left: 4px solid var(--tone); }
+.kal-fin.danger { --tone: var(--danger); }
+.kal-fin.warning { --tone: var(--warning); }
+.kal-fin.info { --tone: var(--info); }
+.kal-fin.success { --tone: var(--success); }

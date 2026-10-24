@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Copy, Download, Info, MessageCircle, Share2 } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -13,6 +14,8 @@ import { useStore } from '../store/StoreContext'
 import { csvBlob, downloadBlob, waNumber, waText, type Cell } from '../lib/export'
 import { renderSetoranImage } from '../lib/setoranImage'
 import SetoranTunggakan from '../components/SetoranTunggakan'
+import { promoNoteLines, type PromoNoteRow } from '../lib/promo'
+import './Promo.css'
 import './Setoran.css'
 
 interface Report {
@@ -77,7 +80,12 @@ export default function Setoran() {
   const notify = useToast()
   const confirm = useConfirm()
   const store = useStore()
-  const [date, setDate] = useState(todayWIB())
+  const [params] = useSearchParams()
+  const [date, setDate] = useState(() => {
+    const q = params.get('tanggal')
+    return q && /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : todayWIB()
+  })
+  const [promoRows, setPromoRows] = useState<PromoNoteRow[]>([])
   const [rows, setRows] = useState<Report[]>([])
   const [phones, setPhones] = useState<Map<number, string>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -117,13 +125,16 @@ export default function Setoran() {
   }
 
   async function fetchDetail(supplierId: number) {
-    const [d, p] = await Promise.all([
+    const [d, p, n] = await Promise.all([
       supabase.rpc('supplier_settlement_detail', { p_date: date, p_supplier_id: supplierId }),
       supabase.rpc('supplier_payments', { p_date: date, p_supplier_id: supplierId }),
+      supabase.rpc('supplier_promo_notes', { p_date: date, p_supplier_id: supplierId }),
     ])
     if (d.error) throw d.error
     if (p.error) throw p.error
-    return { details: (d.data ?? []) as Detail[], payments: (p.data ?? []) as Payment[] }
+    // SQL promo belum dijalankan -> rincian setoran tetap jalan tanpa catatan promo
+    const promo = n.error ? [] : ((n.data ?? []) as PromoNoteRow[])
+    return { details: (d.data ?? []) as Detail[], payments: (p.data ?? []) as Payment[], promo }
   }
 
   async function toggleDetail(id: number) {
@@ -135,6 +146,7 @@ export default function Setoran() {
       const r = await fetchDetail(id)
       setDetails(r.details)
       setPayments(r.payments)
+      setPromoRows(r.promo)
       setOpen(id)
     } catch (err) {
       notify(errText(err), 'error')
@@ -145,7 +157,8 @@ export default function Setoran() {
   async function openShare(r: Report) {
     setPreparing(r.supplier_id)
     try {
-      const { details: d, payments: p } = await fetchDetail(r.supplier_id)
+      const { details: d, payments: p, promo } = await fetchDetail(r.supplier_id)
+      const promoLines = promoNoteLines(promo)
       const blob = await renderSetoranImage({
         appName: store.name,
         tagline: store.tagline,
@@ -156,6 +169,7 @@ export default function Setoran() {
         payable: r.total_payable,
         paid: r.total_paid,
         payments: p.map((x) => ({ amount: x.amount_paid, when: time(x.paid_at), by: x.paid_by_name || '-' })),
+        promoNotes: promoLines,
         generatedAt: time(new Date().toISOString()),
       })
       const file = new File([blob], fileName(r.supplier_name, date), { type: 'image/png' })
@@ -172,6 +186,7 @@ export default function Setoran() {
           soldQty: r.sold_qty,
           payable: r.total_payable,
           paid: r.total_paid,
+          promoLines,
         }),
         canShare: typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] }),
       })
@@ -420,6 +435,14 @@ export default function Setoran() {
                         </tbody>
                       </table>
                     </div>
+                    {promoRows.length > 0 && (
+                      <div className="promo-note">
+                        <strong>Catatan promo (ikut terkirim ke supplier)</strong>
+                        {promoNoteLines(promoRows).map((t, i) => (
+                          <p key={i}>{t}</p>
+                        ))}
+                      </div>
+                    )}
                     <div>
                       <strong>Riwayat pembayaran</strong>
                       {payments.length === 0 && <div className="page-sub">Belum ada pembayaran.</div>}

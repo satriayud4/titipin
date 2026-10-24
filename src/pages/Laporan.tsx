@@ -10,6 +10,7 @@ import { addDays, monthStart, prevMonth, shortDay, todayWIB } from '../lib/dates
 import { fetchReport, profit, type ReportData } from '../lib/report'
 import { csvBlob, downloadBlob, printInLightMode, reportCsv } from '../lib/export'
 import { useStore } from '../store/StoreContext'
+import PromoReport from '../components/PromoReport'
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -187,6 +188,8 @@ export default function Laporan() {
                   </div>
                 )}
               </section>
+
+              <PromoReport from={from} to={to} />
 
               <section className="panel">
                 <h2>Produk terlaris (20 teratas)</h2>
