@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Copy, Download, Info, MessageCircle, Share2 } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import DatePicker from '../components/DatePicker'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { supabase } from '../lib/supabase'
@@ -100,6 +101,10 @@ export default function Setoran() {
   const [share, setShare] = useState<ShareState | null>(null)
   const [filter, setFilter] = useState<'all' | 'due' | 'done'>('all')
   const [tick, setTick] = useState(0)
+  const [loadedDate, setLoadedDate] = useState('')
+  const [focus, setFocus] = useState<{ date: string; supplierId: number } | null>(null)
+  const [flash, setFlash] = useState<number | null>(null)
+  const flashTimer = useRef<number | undefined>(undefined)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -110,6 +115,7 @@ export default function Setoran() {
     if (rep.error) notify(errText(rep.error), 'error')
     else setRows((rep.data ?? []) as Report[])
     setPhones(new Map((sup.data ?? []).map((x) => [x.id as number, (x.phone as string | null) ?? ''])))
+    setLoadedDate(date)
     setLoading(false)
     setTick((t) => t + 1)
   }, [date, notify])
@@ -123,6 +129,42 @@ export default function Setoran() {
     setDate(d)
     setOpen(null)
   }
+
+  // Dari "Belum disetor": pindah ke harinya, buka rincian supplier itu, lalu gulir ke kartunya.
+  function showSupplierDay(d: string, supplierId: number) {
+    setFilter('all')
+    if (d !== date) changeDate(d)
+    setFocus({ date: d, supplierId })
+  }
+
+  useEffect(() => {
+    if (!focus || loading || loadedDate !== focus.date) return
+    const { supplierId } = focus
+    setFocus(null)
+    if (!rows.some((r) => r.supplier_id === supplierId)) {
+      notify('Tagihan supplier itu tidak ditemukan pada tanggal tersebut.', 'error')
+      return
+    }
+    void (async () => {
+      try {
+        const r = await fetchDetail(supplierId)
+        setDetails(r.details)
+        setPayments(r.payments)
+        setPromoRows(r.promo)
+        setOpen(supplierId)
+      } catch (err) {
+        notify(errText(err), 'error')
+      }
+      // tunggu kartu selesai digambar (kartu melebar saat rincian terbuka), baru gulir
+      window.setTimeout(() => {
+        document.getElementById(`st-sup-${supplierId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        setFlash(supplierId)
+        window.clearTimeout(flashTimer.current)
+        flashTimer.current = window.setTimeout(() => setFlash(null), 2200)
+      }, 80)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, loading, loadedDate, rows])
 
   async function fetchDetail(supplierId: number) {
     const [d, p, n] = await Promise.all([
@@ -302,13 +344,13 @@ export default function Setoran() {
         }
       />
 
-      <SetoranTunggakan refreshKey={tick} onPickDate={(d) => { changeDate(d); window.scrollTo({ top: 0, behavior: 'smooth' }) }} onPaid={() => void load()} />
+      <SetoranTunggakan refreshKey={tick} onPickDate={showSupplierDay} onPaid={() => void load()} />
 
       <div className="toolbar">
         <button className="btn-icon" onClick={() => changeDate(addDays(date, -1))} aria-label="Hari sebelumnya">
           <ChevronLeft size={18} />
         </button>
-        <input type="date" value={date} max={todayWIB()} onChange={(e) => changeDate(e.target.value)} />
+        <DatePicker className="st-datepick" value={date} max={todayWIB()} onChange={changeDate} ariaLabel="Pilih tanggal setoran" />
         <button className="btn-icon" onClick={() => changeDate(addDays(date, 1))} disabled={isToday} aria-label="Hari berikutnya">
           <ChevronRight size={18} />
         </button>
@@ -370,7 +412,7 @@ export default function Setoran() {
             const due = dueOf(r)
             const pct = r.total_payable > 0 ? Math.min(100, Math.round((r.total_paid / r.total_payable) * 100)) : 0
             return (
-              <section key={r.supplier_id} className={`panel st-card${open === r.supplier_id ? ' open' : ''}`}>
+              <section key={r.supplier_id} id={`st-sup-${r.supplier_id}`} className={`panel st-card${open === r.supplier_id ? ' open' : ''}${flash === r.supplier_id ? ' flash' : ''}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0 }}>{r.supplier_name}</h2>
                   <span className={`badge ${st.cls}`}>{st.text}</span>

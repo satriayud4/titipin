@@ -1,0 +1,33 @@
+/* Form "Ubah stok" */
+.se-form { display: grid; gap: 16px; padding-top: 4px; }
+.se-product { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--r); background: var(--surface-2); }
+.se-product img, .se-noimg { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--border-soft); }
+.se-product-info { display: grid; gap: 1px; min-width: 0; }
+.se-product-info strong { font-size: 1rem; overflow-wrap: anywhere; }
+.se-product-info span { font-size: 0.88rem; color: var(--primary); font-weight: 700; }
+.se-product-info small { color: var(--muted); }
+.se-section { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border-soft); border-radius: var(--r); }
+.se-section h3 { margin: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.se-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 420px) { .se-two { grid-template-columns: minmax(0, 1fr); } }
+.se-input {
+  display: flex; align-items: stretch; min-width: 0; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.se-input:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.se-input i {
+  display: grid; place-items: center; flex: none; padding: 0 12px; font-style: normal; font-weight: 700;
+  font-size: 0.85rem; color: var(--muted); background: var(--surface-2);
+}
+.se-input input { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.se-input input:focus-visible { box-shadow: none; }
+.se-input input:first-child { text-align: left; }
+.se-input.locked { background: var(--surface-2); opacity: 0.8; }
+.se-profit {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--primary-soft); color: var(--primary); font-size: 0.9rem;
+}
+.se-profit b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.se-profit.loss { background: var(--danger-soft); color: var(--danger); }
+.se-profit small { color: inherit; opacity: 0.85; }

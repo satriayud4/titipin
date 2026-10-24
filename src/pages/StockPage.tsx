@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import RusakPanel from '../components/RusakPanel'
+import DatePicker, { formatDateLong } from '../components/DatePicker'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { errText } from '../lib/errors'
@@ -13,6 +14,7 @@ import { rupiah } from '../lib/format'
 import { addDays, shortDay, todayWIB } from '../lib/dates'
 import { imageUrl } from '../lib/image'
 import { LOW_STOCK } from '../lib/alerts'
+import './StockEdit.css'
 
 interface Batch {
   batch_id: number
@@ -309,11 +311,28 @@ export default function StockPage() {
       )}
 
       {edit && (
-        <Modal title="Ubah stok" onClose={() => !busy && setEdit(null)}>
-          <form noValidate onSubmit={(ev) => void saveEdit(ev)} className="form-stack">
-            <div>
-              <strong>{nameOf(edit.batch)}</strong>
-              <div className="page-sub">Masuk {edit.batch.received_date}</div>
+        <Modal
+          title="Ubah stok"
+          onClose={() => !busy && setEdit(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setEdit(null)} disabled={busy}>Batal</button>
+              <button type="submit" form="se-form" className="btn-primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan perubahan'}</button>
+            </>
+          }
+        >
+          <form id="se-form" noValidate onSubmit={(ev) => void saveEdit(ev)} className="se-form">
+            <div className="se-product">
+              {products.get(edit.batch.product_id)?.image_path ? (
+                <img src={imageUrl(products.get(edit.batch.product_id)!.image_path!)} alt="" />
+              ) : (
+                <div className="se-noimg" />
+              )}
+              <div className="se-product-info">
+                <strong>{nameOf(edit.batch)}</strong>
+                <span>{supplierOf(edit.batch)}</span>
+                <small>Masuk {formatDateLong(edit.batch.received_date)} · terpakai {used} dari {edit.batch.qty_in}</small>
+              </div>
             </div>
 
             {used > 0 && (
@@ -326,43 +345,60 @@ export default function StockPage() {
               </div>
             )}
 
-            <label className="field">
-              <span>Supplier <span className="req">*</span></span>
-              <select value={edit.supplierId} disabled onChange={(e) => setEdit({ ...edit, supplierId: e.target.value })}>
-                <option value="">— pilih supplier —</option>
-                {[...suppliers.entries()].map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Tanggal expired <span className="req">*</span></span>
-              <input type="date" min={edit.batch.received_date} value={edit.expired} onChange={(e) => setEdit({ ...edit, expired: e.target.value })} />
-              <span className="hint">Barang dijual sampai tanggal ini. Retur boleh kapan saja sebelum lewat tanggal ini.</span>
-            </label>
-            <label className="field">
-              <span>Jumlah stok masuk <span className="req">*</span></span>
-              <input type="number" min={Math.max(1, used)} inputMode="numeric" value={edit.qty} onChange={(e) => setEdit({ ...edit, qty: e.target.value })} />
-            </label>
-            <label className="field">
-              <span>Harga supplier (Rp) <span className="req">*</span></span>
-              <input type="number" min={0} inputMode="numeric" disabled={used > 0} value={edit.cost} onChange={(e) => setEdit({ ...edit, cost: e.target.value })} />
-            </label>
-            <label className="field">
-              <span>Harga jual (Rp) <span className="req">*</span></span>
-              <input type="number" min={0} inputMode="numeric" value={edit.sell} onChange={(e) => setEdit({ ...edit, sell: e.target.value })} />
-              {edit.cost !== '' && edit.sell !== '' && (
-                <span className="hint">
-                  Untung per pcs: {rupiah(Number(edit.sell) - Number(edit.cost))}
-                  {Number(edit.sell) < Number(edit.cost) ? ' (di bawah harga supplier)' : ''}
-                </span>
-              )}
-            </label>
+            <section className="se-section">
+              <h3>Masa jual</h3>
+              <div className="field">
+                <span>Tanggal expired <span className="req">*</span></span>
+                <DatePicker
+                  value={edit.expired}
+                  min={edit.batch.received_date}
+                  onChange={(v) => setEdit({ ...edit, expired: v })}
+                  ariaLabel="Tanggal expired"
+                  presets={[
+                    { label: 'Besok', days: 1 },
+                    { label: '+3 hari', days: 3 },
+                    { label: '+1 minggu', days: 7 },
+                    { label: '+2 minggu', days: 14 },
+                    { label: '+1 bulan', days: 30 },
+                  ]}
+                />
+                <span className="hint">Barang dijual sampai tanggal ini. Retur boleh kapan saja sebelum lewat tanggal ini.</span>
+              </div>
+            </section>
 
-            <div className="form-actions">
-              <button type="button" onClick={() => setEdit(null)} disabled={busy}>Batal</button>
-              <button disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan perubahan'}</button>
-            </div>
+            <section className="se-section">
+              <h3>Jumlah &amp; harga</h3>
+              <label className="field">
+                <span>Jumlah stok masuk <span className="req">*</span></span>
+                <div className="se-input">
+                  <input type="number" min={Math.max(1, used)} inputMode="numeric" value={edit.qty} onFocus={(e) => e.currentTarget.select()} onChange={(e) => setEdit({ ...edit, qty: e.target.value })} />
+                  <i>pcs</i>
+                </div>
+              </label>
+              <div className="se-two">
+                <label className="field">
+                  <span>Harga supplier <span className="req">*</span></span>
+                  <div className={`se-input${used > 0 ? ' locked' : ''}`}>
+                    <i>Rp</i>
+                    <input type="number" min={0} inputMode="numeric" disabled={used > 0} value={edit.cost} onFocus={(e) => e.currentTarget.select()} onChange={(e) => setEdit({ ...edit, cost: e.target.value })} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span>Harga jual <span className="req">*</span></span>
+                  <div className="se-input">
+                    <i>Rp</i>
+                    <input type="number" min={0} inputMode="numeric" value={edit.sell} onFocus={(e) => e.currentTarget.select()} onChange={(e) => setEdit({ ...edit, sell: e.target.value })} />
+                  </div>
+                </label>
+              </div>
+              {edit.cost !== '' && edit.sell !== '' && (
+                <div className={`se-profit${Number(edit.sell) < Number(edit.cost) ? ' loss' : ''}`}>
+                  <span>Untung per pcs</span>
+                  <b>{rupiah(Number(edit.sell) - Number(edit.cost))}</b>
+                  {Number(edit.sell) < Number(edit.cost) && <small>di bawah harga supplier</small>}
+                </div>
+              )}
+            </section>
           </form>
         </Modal>
       )}

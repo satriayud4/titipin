@@ -28,7 +28,8 @@ const dayLabel = (d: string) =>
 interface Props {
   /** Berubah setiap kali halaman Setoran memuat ulang, supaya panel ikut segar. */
   refreshKey: number
-  onPickDate: (date: string) => void
+  /** Lihat rincian satu supplier pada hari tertentu. */
+  onPickDate: (date: string, supplierId: number) => void
   /** Dipanggil setelah pembayaran tercatat; halaman induk memuat ulang dan menaikkan refreshKey. */
   onPaid: () => void
 }
@@ -144,7 +145,7 @@ export default function SetoranTunggakan({ refreshKey, onPickDate, onPaid }: Pro
                           {rupiah(d.sisa)}
                           {d.paid > 0 && <small> (dibayar {rupiah(d.paid)} dari {rupiah(d.payable)})</small>}
                         </span>
-                        <button type="button" className="btn-sm btn-ghost" onClick={() => onPickDate(d.tgl)}>Lihat</button>
+                        <button type="button" className="btn-sm btn-ghost" onClick={() => onPickDate(d.tgl, g.id)}>Lihat</button>
                       </li>
                     ))}
                   </ul>

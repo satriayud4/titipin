@@ -76,3 +76,4 @@
 
 /* layar lebar: pilihan supplier melipat ke bawah, tidak digeser */
 @media (min-width: 900px) { .bm-rail { flex-wrap: wrap; overflow: visible; } }
+.bm-f .dp-trigger { min-height: 40px; padding: 6px 10px; font-size: 0.9rem; }

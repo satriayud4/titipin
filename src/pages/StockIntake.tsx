@@ -6,6 +6,7 @@ import { useConfirm } from '../components/ConfirmDialog'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import NewProductModal from '../components/NewProductModal'
+import DatePicker from '../components/DatePicker'
 import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
 import SupplierPicker from '../components/SupplierPicker'
 import { useStoredState } from '../lib/prefs'
@@ -15,6 +16,13 @@ import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
 import { rupiah } from '../lib/format'
 import './BarangMasuk.css'
+
+const EXP_PRESETS = [
+  { label: 'Besok', days: 1 },
+  { label: '+3 hari', days: 3 },
+  { label: '+1 minggu', days: 7 },
+  { label: '+2 minggu', days: 14 },
+]
 
 const LAST_SUPPLIER_KEY = 'titipin:barangmasuk:supplier'
 
@@ -389,7 +397,7 @@ export default function StockIntake() {
           </label>
           <label>
             Expired
-            <input type="date" min={todayWIB()} value={e.expired} onChange={(ev) => patch(e.productId, 'expired', ev.target.value)} />
+            <DatePicker min={todayWIB()} value={e.expired} onChange={(v) => patch(e.productId, 'expired', v)} ariaLabel="Expired" placeholder="Pilih tanggal" presets={EXP_PRESETS} />
           </label>
         </div>
         {hasPrices && (
@@ -496,7 +504,7 @@ export default function StockIntake() {
                 </label>
                 <label className="bm-f bm-f-exp">
                   <span>Expired</span>
-                  <input type="date" min={todayWIB()} value={e?.expired ?? ''} onChange={(ev) => setCell(p, 'expired', ev.target.value)} aria-label={`Expired ${p.name}`} />
+                  <DatePicker min={todayWIB()} value={e?.expired ?? ''} onChange={(v) => setCell(p, 'expired', v)} ariaLabel={`Expired ${p.name}`} placeholder="Pilih tanggal" presets={EXP_PRESETS} />
                 </label>
                 <span className={`bm-margin${margin !== null && margin < 0 ? ' loss' : ''}`}>
                   {margin === null ? '' : margin < 0 ? `Rugi ${rupiah(-margin)}` : `+${rupiah(margin)}`}
