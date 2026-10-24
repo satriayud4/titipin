@@ -25,9 +25,11 @@ interface BatchLite {
   sellable_until: string
   return_due_date: string
 }
-interface SettleRow {
-  total_payable: number
-  total_paid: number
+interface OutstandingRow {
+  supplier_id: number
+  tgl: string
+  payable: number
+  paid: number
 }
 
 export function useAlerts(refreshKey: string) {
@@ -54,7 +56,7 @@ export function useAlerts(refreshKey: string) {
           .select('product_id, qty_remaining, received_date, sellable_until, return_due_date')
           .gt('qty_remaining', 0),
         supabase.from('products').select('id, name'),
-        supabase.rpc('supplier_settlement_report', { p_date: addDays(today, -1) }),
+        supabase.rpc('supplier_outstanding_days'),
         supabase
           .from('scheduled_orders')
           .select('id, title, party, due_date, due_time, status')
@@ -82,6 +84,18 @@ export function useAlerts(refreshKey: string) {
           }),
         )
 
+      // barang yang expired hari ini atau besok: segera retur sebelum lewat tanggalnya
+      const soon = rows.filter((x) => x.received_date <= today && x.sellable_until >= today && x.sellable_until <= addDays(today, 1))
+      if (soon.length > 0) {
+        list.push({
+          id: 'expired-soon',
+          kind: 'warning',
+          title: `${soon.reduce((n, x) => n + x.qty_remaining, 0)} barang segera expired`,
+          detail: 'Expired hari ini atau besok. Retur sebelum lewat tanggalnya.',
+          to: '/retur',
+        })
+      }
+
       // barang yang perlu diretur
       const waiting = rows.filter((x) => x.sellable_until < today)
       if (waiting.length > 0) {
@@ -96,16 +110,16 @@ export function useAlerts(refreshKey: string) {
         })
       }
 
-      // setoran kemarin yang belum lunas
+      // setoran yang belum dibayar (tidak harus tiap hari; hari ini tidak dihitung karena masih berjalan)
       if (!s.error) {
-        const settle = (s.data ?? []) as SettleRow[]
-        const unpaid = settle.reduce((n, x) => n + Math.max(x.total_payable - x.total_paid, 0), 0)
-        const count = settle.filter((x) => x.total_payable > x.total_paid).length
+        const rowsDue = ((s.data ?? []) as OutstandingRow[]).filter((x) => x.tgl < today && x.payable > x.paid)
+        const unpaid = rowsDue.reduce((n, x) => n + (x.payable - x.paid), 0)
+        const count = new Set(rowsDue.map((x) => x.supplier_id)).size
         if (unpaid > 0) {
           list.push({
             id: 'setoran',
-            kind: 'danger',
-            title: 'Setoran kemarin belum lunas',
+            kind: 'warning',
+            title: 'Setoran supplier belum dibayar',
             detail: `${rupiah(unpaid)} · ${count} supplier`,
             to: '/setoran',
           })

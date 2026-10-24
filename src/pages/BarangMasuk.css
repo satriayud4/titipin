@@ -23,7 +23,7 @@
 .bm-quick { display: grid; gap: 8px; }
 .bm-qhead, .bm-qrow {
   display: grid; align-items: center; gap: 10px 12px;
-  grid-template-columns: 44px minmax(0, 1fr) 96px 132px 132px 112px;
+  grid-template-columns: 44px minmax(0, 1fr) 96px 132px 132px 150px 112px;
 }
 .bm-qhead { padding: 0 12px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
 .bm-qrow {
@@ -39,6 +39,7 @@
 .bm-f > span { display: none; }
 .bm-f input { width: 100%; min-height: 40px; padding: 6px 10px; text-align: right; font-variant-numeric: tabular-nums; }
 .bm-f-qty input { font-weight: 800; text-align: center; }
+.bm-f-exp input { text-align: left; font-variant-numeric: normal; }
 .bm-f input::-webkit-outer-spin-button, .bm-f input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .bm-f input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 .bm-margin { font-size: 0.82rem; font-weight: 700; color: var(--success); text-align: right; font-variant-numeric: tabular-nums; }
@@ -53,7 +54,8 @@
   .bm-qrow > .bm-f-qty { grid-column: 4; grid-row: 1; }
   .bm-qrow > label:nth-of-type(2) { grid-column: 1 / 3; grid-row: 2; }
   .bm-qrow > label:nth-of-type(3) { grid-column: 3 / 5; grid-row: 2; }
-  .bm-qrow > .bm-margin { grid-column: 1 / -1; grid-row: 3; text-align: left; }
+  .bm-qrow > .bm-f-exp { grid-column: 1 / -1; grid-row: 3; }
+  .bm-qrow > .bm-margin { grid-column: 1 / -1; grid-row: 4; text-align: left; }
   .bm-qrow > .bm-margin:empty { display: none; }
   .bm-qrow .bm-f > span { display: block; margin-bottom: 2px; font-size: 0.7rem; font-weight: 600; color: var(--muted); }
   .bm-qrow .bm-f-qty > span { display: none; }

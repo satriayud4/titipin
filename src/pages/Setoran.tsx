@@ -12,6 +12,7 @@ import { addDays, todayWIB } from '../lib/dates'
 import { useStore } from '../store/StoreContext'
 import { csvBlob, downloadBlob, waNumber, waText, type Cell } from '../lib/export'
 import { renderSetoranImage } from '../lib/setoranImage'
+import SetoranTunggakan from '../components/SetoranTunggakan'
 import './Setoran.css'
 
 interface Report {
@@ -90,6 +91,7 @@ export default function Setoran() {
   const [preparing, setPreparing] = useState<number | null>(null)
   const [share, setShare] = useState<ShareState | null>(null)
   const [filter, setFilter] = useState<'all' | 'due' | 'done'>('all')
+  const [tick, setTick] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,6 +103,7 @@ export default function Setoran() {
     else setRows((rep.data ?? []) as Report[])
     setPhones(new Map((sup.data ?? []).map((x) => [x.id as number, (x.phone as string | null) ?? ''])))
     setLoading(false)
+    setTick((t) => t + 1)
   }, [date, notify])
 
   useEffect(() => {
@@ -276,13 +279,15 @@ export default function Setoran() {
     <div className="st-page">
       <PageHeader
         title="Setoran Supplier"
-        subtitle="Tagihan harian ke supplier, dihitung dari barang yang terjual."
+        subtitle="Tagihan dihitung per hari dari barang yang terjual. Boleh dibayar kapan saja, yang belum dibayar terkumpul di Belum disetor."
         actions={
           <button className="btn-icon" onClick={exportCsv} disabled={rows.length === 0}>
             <Download size={18} /> Unduh CSV
           </button>
         }
       />
+
+      <SetoranTunggakan refreshKey={tick} onPickDate={(d) => { changeDate(d); window.scrollTo({ top: 0, behavior: 'smooth' }) }} onPaid={() => void load()} />
 
       <div className="toolbar">
         <button className="btn-icon" onClick={() => changeDate(addDays(date, -1))} aria-label="Hari sebelumnya">

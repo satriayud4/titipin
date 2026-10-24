@@ -7,12 +7,14 @@ import Modal from './Modal'
 import { errText } from '../lib/errors'
 
 interface Props {
+  supplierId: number
+  supplierName?: string
   categories: { id: number; name: string }[]
   onClose: () => void
   onCreated: (productId: number) => void | Promise<void>
 }
 
-export default function NewProductModal({ categories, onClose, onCreated }: Props) {
+export default function NewProductModal({ supplierId, supplierName, categories, onClose, onCreated }: Props) {
   const notify = useToast()
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
@@ -36,7 +38,8 @@ export default function NewProductModal({ categories, onClose, onCreated }: Prop
     if (name.trim() === '') return notify('Nama produk wajib diisi.', 'error')
     if (category.trim() === '') return notify('Kategori wajib diisi.', 'error')
     if (unit.trim() === '') return notify('Satuan wajib diisi.', 'error')
-    if (!file) return notify('Gambar produk wajib diunggah. Pilih gambar terlebih dahulu.', 'error')
+    if (!file) return notify('Gambar produk wajib diunggah. Ambil foto atau pilih gambar terlebih dahulu.', 'error')
+    if (!supplierId) return notify('Pilih supplier terlebih dahulu.', 'error')
 
     setBusy(true)
     try {
@@ -52,7 +55,7 @@ export default function NewProductModal({ categories, onClose, onCreated }: Prop
 
       const { data: prod, error } = await supabase
         .from('products')
-        .insert({ name: name.trim(), category_id: catId, unit: unit.trim(), image_path: image })
+        .insert({ name: name.trim(), category_id: catId, unit: unit.trim(), image_path: image, supplier_id: supplierId })
         .select('id')
         .single()
       if (error) throw error
@@ -68,9 +71,9 @@ export default function NewProductModal({ categories, onClose, onCreated }: Prop
   }
 
   return (
-    <Modal title="Produk baru" onClose={() => !busy && onClose()}>
+    <Modal title={supplierName ? `Produk baru · ${supplierName}` : 'Produk baru'} onClose={() => !busy && onClose()}>
       <form noValidate onSubmit={(e) => void save(e)} className="form-stack">
-        <small>Tanda <span className="req">*</span> wajib diisi. Gambar hanya diminta sekali, saat produk dibuat.</small>
+        <small>Tanda <span className="req">*</span> wajib diisi. Produk ini milik supplier yang sedang dipilih. Gambar hanya diminta sekali, saat produk dibuat.</small>
         <label className="field">
           <span>Nama produk <span className="req">*</span></span>
           <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -88,7 +91,16 @@ export default function NewProductModal({ categories, onClose, onCreated }: Prop
           <span>Gambar produk <span className="req">*</span></span>
           <div className="upload">
             {preview ? <img className="upload-preview" src={preview} alt="" /> : <div className="upload-preview"><ImagePlus size={30} /></div>}
-            <input type="file" accept="image/*" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+            <div className="upload-actions">
+              <label className="btn">
+                Ambil foto
+                <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+              </label>
+              <label className="btn">
+                Upload gambar
+                <input type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+              </label>
+            </div>
           </div>
         </div>
         <div className="form-actions">

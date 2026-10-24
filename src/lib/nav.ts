@@ -4,7 +4,6 @@ import {
   CreditCard,
   HandCoins,
   LayoutDashboard,
-  Package,
   PackageCheck,
   PackagePlus,
   Settings,
@@ -58,7 +57,6 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
   {
   title: 'Master data',
   items: [
-    { to: '/produk', label: 'Produk', icon: Package },
     { to: '/paket', label: 'Master Paket', icon: PackageCheck },
     { to: '/kategori', label: 'Kategori', icon: Tags },
     { to: '/supplier', label: 'Supplier', icon: Truck },

@@ -9,6 +9,7 @@ import NewProductModal from '../components/NewProductModal'
 import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
 import SupplierPicker from '../components/SupplierPicker'
 import { useStoredState } from '../lib/prefs'
+import { todayWIB } from '../lib/dates'
 import CartDock from '../components/CartDock'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
@@ -44,6 +45,8 @@ interface Product {
   name: string
   category_id: number | null
   image_path: string | null
+  supplier_id: number | null
+  unit: string | null
 }
 interface Hist {
   cost: number
@@ -54,6 +57,7 @@ interface Entry {
   qty: string
   cost: string
   sell: string
+  expired: string
 }
 
 export default function StockIntake() {
@@ -79,7 +83,7 @@ export default function StockIntake() {
     const [s, c, p, r] = await Promise.all([
       supabase.from('suppliers').select('id, name').eq('is_active', true).order('name'),
       supabase.from('categories').select('id, name').order('name'),
-      supabase.from('products').select('id, name, category_id, image_path').eq('is_active', true).order('name'),
+      supabase.from('products').select('id, name, category_id, image_path, supplier_id, unit').eq('is_active', true).order('name'),
       supabase.from('stock_batches').select('supplier_id, product_id').order('id', { ascending: false }).limit(600),
     ])
     // supplier yang paling baru menitip tampil paling depan
@@ -172,11 +176,13 @@ export default function StockIntake() {
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
   const supplierName = suppliers.find((s) => String(s.id) === supplierId)?.name ?? ''
-  const usualCount = products.filter((p) => history.has(p.id)).length
+  // setiap barang milik satu supplier: hanya tampilkan barang supplier yang sedang dipilih
+  const supplierProducts = useMemo(() => products.filter((p) => String(p.supplier_id) === supplierId), [products, supplierId])
+  const usualCount = supplierProducts.filter((p) => history.has(p.id)).length
   const selectedIds = new Set(entries.map((e) => e.productId))
 
   const q = search.trim().toLowerCase()
-  const visible = products
+  const visible = supplierProducts
     .filter((p) => {
       if (q && !p.name.toLowerCase().includes(q)) return false
       if (cat === 'biasa') return history.has(p.id)
@@ -195,7 +201,7 @@ export default function StockIntake() {
 
   const blank = (id: number): Entry => {
     const h = history.get(id)
-    return { productId: id, qty: '', cost: h ? String(h.cost) : '', sell: h ? String(h.sell) : '' }
+    return { productId: id, qty: '', cost: h ? String(h.cost) : '', sell: h ? String(h.sell) : '', expired: '' }
   }
 
   function toggle(p: Product) {
@@ -205,12 +211,12 @@ export default function StockIntake() {
   function addUsual() {
     setEntries((es) => {
       const have = new Set(es.map((e) => e.productId))
-      return [...es, ...products.filter((p) => history.has(p.id) && !have.has(p.id)).map((p) => blank(p.id))]
+      return [...es, ...supplierProducts.filter((p) => history.has(p.id) && !have.has(p.id)).map((p) => blank(p.id))]
     })
     setSheet(true)
   }
 
-  function patch(productId: number, field: 'qty' | 'cost' | 'sell', value: string) {
+  function patch(productId: number, field: 'qty' | 'cost' | 'sell' | 'expired', value: string) {
     setEntries((es) => es.map((e) => (e.productId === productId ? { ...e, [field]: value } : e)))
   }
 
@@ -241,6 +247,8 @@ export default function StockIntake() {
       if (e.qty.trim() === '' || !Number.isInteger(qty) || qty <= 0) return `${nm}: stok wajib diisi dan harus lebih dari 0.`
       if (e.cost.trim() === '' || !Number.isInteger(cost) || cost < 0) return `${nm}: harga supplier wajib diisi (angka bulat, minimal 0).`
       if (e.sell.trim() === '' || !Number.isInteger(sell) || sell < 0) return `${nm}: harga jual wajib diisi (angka bulat, minimal 0).`
+      if (e.expired === '') return `${nm}: tanggal expired wajib diisi.`
+      if (e.expired < todayWIB()) return `${nm}: tanggal expired sudah lewat.`
     }
     return ''
   }
@@ -283,7 +291,7 @@ export default function StockIntake() {
       const items = list.flatMap((e) => {
         const pr = productById.get(e.productId)
         return pr
-          ? [{ name: pr.name, category: catName.get(pr.category_id ?? -1) ?? '', qty: Number(e.qty), cost_price: Number(e.cost), sell_price: Number(e.sell), image_path: null }]
+          ? [{ name: pr.name, category: catName.get(pr.category_id ?? -1) ?? '', unit: pr.unit ?? 'pcs', qty: Number(e.qty), cost_price: Number(e.cost), sell_price: Number(e.sell), expired_date: e.expired, image_path: null }]
           : []
       })
       const { error } = await supabase.rpc('add_stock_batches', { p_supplier_id: Number(sid), p_items: items })
@@ -312,7 +320,7 @@ export default function StockIntake() {
   }
 
   /** Isi satu kolom untuk satu produk langsung dari tabel (mode cepat). */
-  function setCell(p: Product, field: 'qty' | 'cost' | 'sell', value: string) {
+  function setCell(p: Product, field: 'qty' | 'cost' | 'sell' | 'expired', value: string) {
     setEntries((es) => {
       const i = es.findIndex((e) => e.productId === p.id)
       if (i === -1) {
@@ -322,7 +330,7 @@ export default function StockIntake() {
       const next = es.map((e, j) => (j === i ? { ...e, [field]: value } : e))
       const e = next[i]
       const h = history.get(p.id)
-      const untouched = h ? e.cost === String(h.cost) && e.sell === String(h.sell) : e.cost === '' && e.sell === ''
+      const untouched = (h ? e.cost === String(h.cost) && e.sell === String(h.sell) : e.cost === '' && e.sell === '') && e.expired === ''
       return field === 'qty' && value === '' && untouched ? next.filter((_, j) => j !== i) : next
     })
   }
@@ -379,6 +387,10 @@ export default function StockIntake() {
             Harga jual
             <input type="number" min={0} inputMode="numeric" value={e.sell} onChange={(ev) => patch(e.productId, 'sell', ev.target.value)} />
           </label>
+          <label>
+            Expired
+            <input type="date" min={todayWIB()} value={e.expired} onChange={(ev) => patch(e.productId, 'expired', ev.target.value)} />
+          </label>
         </div>
         {hasPrices && (
           <span className={`hint${margin < 0 ? ' warn' : ''}`}>
@@ -397,8 +409,8 @@ export default function StockIntake() {
                 <Search size={18} />
                 <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
-              <button className="btn-icon" onClick={() => setNewOpen(true)}>
-                <Plus size={16} /> <span className="bm-new-label">Produk baru</span>
+              <button className="btn-icon" disabled={!supplierId} onClick={() => setNewOpen(true)}>
+                <Plus size={16} /> <span className="bm-new-label">Barang baru</span>
               </button>
               <ViewOptions groups={VIEW_GROUPS} values={prefs} onChange={(k, v) => setPrefs({ [k]: v } as Partial<typeof prefs>)} onReset={resetPrefs} />
             </div>
@@ -442,6 +454,7 @@ export default function StockIntake() {
             <span>Stok</span>
             <span>Harga supplier</span>
             <span>Harga jual</span>
+            <span>Expired</span>
             <span>Laba / pcs</span>
           </div>
           {visible.map((p) => {
@@ -480,6 +493,10 @@ export default function StockIntake() {
                 <label className="bm-f">
                   <span>Harga jual</span>
                   <input type="number" min={0} inputMode="numeric" value={sell} onFocus={(ev) => ev.currentTarget.select()} onChange={(ev) => setCell(p, 'sell', ev.target.value)} aria-label={`Harga jual ${p.name}`} />
+                </label>
+                <label className="bm-f bm-f-exp">
+                  <span>Expired</span>
+                  <input type="date" min={todayWIB()} value={e?.expired ?? ''} onChange={(ev) => setCell(p, 'expired', ev.target.value)} aria-label={`Expired ${p.name}`} />
                 </label>
                 <span className={`bm-margin${margin !== null && margin < 0 ? ' loss' : ''}`}>
                   {margin === null ? '' : margin < 0 ? `Rugi ${rupiah(-margin)}` : `+${rupiah(margin)}`}
@@ -550,11 +567,11 @@ export default function StockIntake() {
         <EmptyState title="Belum ada supplier aktif" text="Tambahkan supplier di menu Supplier (atau aktifkan yang ada), lalu kembali ke sini untuk mencatat barang masuk." />
       ) : !supplierId ? (
         <div className="skeleton" style={{ height: 260, borderRadius: 14 }} />
-      ) : products.length === 0 ? (
+      ) : supplierProducts.length === 0 ? (
         <EmptyState
-          title="Belum ada produk"
-          text="Buat produk pertama Anda, lalu pilih untuk dicatat."
-          action={<button className="btn-primary" onClick={() => setNewOpen(true)}>Produk baru</button>}
+          title="Belum ada barang dari supplier ini"
+          text="Tambahkan barang pertama untuk supplier ini (nama, kategori, satuan, dan foto), lalu isi stok dan harganya."
+          action={<button className="btn-primary" onClick={() => setNewOpen(true)}>Barang baru</button>}
         />
       ) : quick ? (
         quickView
@@ -632,8 +649,10 @@ export default function StockIntake() {
         </div>
       )}
 
-      {newOpen && (
+      {newOpen && supplierId && (
         <NewProductModal
+          supplierId={Number(supplierId)}
+          supplierName={supplierName}
           categories={categories}
           onClose={() => setNewOpen(false)}
           onCreated={async (id) => {

@@ -9,7 +9,7 @@ import EmptyState from '../components/EmptyState'
 import SupplierPicker from '../components/SupplierPicker'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
-import { shortDay, todayWIB } from '../lib/dates'
+import { addDays, shortDay, todayWIB } from '../lib/dates'
 import './Retur.css'
 
 interface BatchRow {
@@ -26,17 +26,18 @@ interface BatchRow {
 type Phase = 'late' | 'today' | 'soon' | 'selling'
 const PHASES: Phase[] = ['late', 'today', 'soon', 'selling']
 const PHASE_META: Record<Phase, { group: string; badge: string; cls: string }> = {
-  late: { group: 'Terlambat retur', badge: 'Terlambat', cls: 'badge-danger' },
-  today: { group: 'Retur hari ini', badge: 'Hari ini', cls: 'badge-warning' },
-  soon: { group: 'Belum jatuh tempo', badge: 'Siap retur', cls: 'badge-info' },
-  selling: { group: 'Masih dijual', badge: 'Masih dijual', cls: 'badge-success' },
+  late: { group: 'Sudah lewat expired', badge: 'Expired', cls: 'badge-danger' },
+  today: { group: 'Expired hari ini', badge: 'Hari ini', cls: 'badge-warning' },
+  soon: { group: 'Segera expired (1–2 hari)', badge: 'Segera', cls: 'badge-info' },
+  selling: { group: 'Masih aman, boleh diretur kapan saja', badge: 'Masih dijual', cls: 'badge-success' },
 }
 
 function phaseOf(b: BatchRow, today: string): Phase {
-  if (b.sellable_until >= today && b.received_date <= today) return 'selling'
+  // retur boleh kapan saja asal belum lewat tanggal expired
   if (b.return_due_date < today) return 'late'
   if (b.return_due_date === today) return 'today'
-  return 'soon'
+  if (b.return_due_date <= addDays(today, 2)) return 'soon'
+  return 'selling'
 }
 
 export default function ReturPage() {
@@ -173,7 +174,7 @@ export default function ReturPage() {
 
   function rowBadge(b: BatchRow) {
     const ph = phaseOf(b, today)
-    const label = ph === 'soon' ? `Retur ${shortDay(b.return_due_date)}` : ph === 'late' ? 'Terlambat retur' : ph === 'today' ? 'Retur hari ini' : 'Masih dijual'
+    const label = ph === 'soon' ? `Expired ${shortDay(b.return_due_date)}` : ph === 'late' ? 'Sudah lewat expired' : ph === 'today' ? 'Expired hari ini' : 'Masih dijual'
     return <span className={`badge ${PHASE_META[ph].cls}`}>{label}</span>
   }
 
@@ -287,7 +288,7 @@ export default function ReturPage() {
               <div className="rt-quick">
                 {notSelling.length > 0 && (
                   <button type="button" className="btn-sm" onClick={() => toggleMany(notSelling)}>
-                    {notSelling.every(isFull) ? 'Batal pilih yang tidak dijual' : `Pilih yang tidak dijual lagi (${notSelling.length})`}
+                    {notSelling.every(isFull) ? 'Batal pilih yang segera expired' : `Pilih yang expired / segera expired (${notSelling.length})`}
                   </button>
                 )}
                 {lines.length > 0 && (

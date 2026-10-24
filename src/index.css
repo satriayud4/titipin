@@ -1279,4 +1279,11 @@ input[type='file'] { width: 100%; min-width: 0; }
   outline-offset: 1px;
   border-radius: 6px;
 }
-
+.upload-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.upload-actions .btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 42px; padding: 9px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-weight: 600; font-size: 0.95rem; cursor: pointer;
+}
+.upload-actions .btn:hover { background: var(--surface-2); border-color: var(--primary); }

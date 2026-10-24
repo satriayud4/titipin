@@ -10,7 +10,7 @@ import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
-import { shortDay, todayWIB } from '../lib/dates'
+import { addDays, shortDay, todayWIB } from '../lib/dates'
 import { imageUrl } from '../lib/image'
 import { LOW_STOCK } from '../lib/alerts'
 
@@ -35,6 +35,7 @@ interface EditState {
   qty: string
   cost: string
   sell: string
+  expired: string
 }
 type Filter = 'semua' | 'jual' | 'menipis' | 'retur'
 
@@ -107,12 +108,13 @@ export default function StockPage() {
       if (b.return_due_date === today) return <span className="badge badge-warning">Retur hari ini</span>
       return <span className="badge badge-muted">Retur {shortDay(b.return_due_date)}</span>
     }
+    if (b.sellable_until <= addDays(today, 2)) return <span className="badge badge-warning">Expired {shortDay(b.sellable_until)}</span>
     if (b.qty_remaining <= LOW_STOCK) return <span className="badge badge-warning">Menipis</span>
     return <span className="badge badge-success">Siap dijual</span>
   }
 
   function startEdit(b: Batch) {
-    setEdit({ batch: b, supplierId: String(b.supplier_id), qty: String(b.qty_in), cost: String(b.cost_price), sell: String(b.sell_price) })
+    setEdit({ batch: b, supplierId: String(b.supplier_id), qty: String(b.qty_in), cost: String(b.cost_price), sell: String(b.sell_price), expired: b.sellable_until })
   }
 
   function validateEdit(e: EditState): string {
@@ -123,6 +125,8 @@ export default function StockPage() {
     if (qty < used) return `Jumlah stok tidak boleh kurang dari yang sudah terpakai (${used}).`
     if (e.cost.trim() === '' || !Number.isInteger(Number(e.cost)) || Number(e.cost) < 0) return 'Harga supplier wajib diisi.'
     if (e.sell.trim() === '' || !Number.isInteger(Number(e.sell)) || Number(e.sell) < 0) return 'Harga jual wajib diisi.'
+    if (e.expired === '') return 'Tanggal expired wajib diisi.'
+    if (e.expired < e.batch.received_date) return 'Tanggal expired tidak boleh sebelum tanggal masuk.'
     return ''
   }
 
@@ -149,6 +153,7 @@ export default function StockPage() {
       p_qty_in: Number(edit.qty),
       p_cost_price: Number(edit.cost),
       p_sell_price: Number(edit.sell),
+      p_expired_date: edit.expired,
     })
     setBusy(false)
     if (error) {
@@ -323,12 +328,17 @@ export default function StockPage() {
 
             <label className="field">
               <span>Supplier <span className="req">*</span></span>
-              <select value={edit.supplierId} disabled={used > 0} onChange={(e) => setEdit({ ...edit, supplierId: e.target.value })}>
+              <select value={edit.supplierId} disabled onChange={(e) => setEdit({ ...edit, supplierId: e.target.value })}>
                 <option value="">— pilih supplier —</option>
                 {[...suppliers.entries()].map(([id, name]) => (
                   <option key={id} value={id}>{name}</option>
                 ))}
               </select>
+            </label>
+            <label className="field">
+              <span>Tanggal expired <span className="req">*</span></span>
+              <input type="date" min={edit.batch.received_date} value={edit.expired} onChange={(e) => setEdit({ ...edit, expired: e.target.value })} />
+              <span className="hint">Barang dijual sampai tanggal ini. Retur boleh kapan saja sebelum lewat tanggal ini.</span>
             </label>
             <label className="field">
               <span>Jumlah stok masuk <span className="req">*</span></span>
