@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
+import SupplierPicker from '../components/SupplierPicker'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
 import { shortDay, todayWIB } from '../lib/dates'
@@ -229,6 +230,20 @@ export default function ReturPage() {
         <EmptyState title="Tidak ada barang untuk diretur" text="Semua barang dari semua supplier sudah terjual atau sudah diretur." />
       ) : (
         <div className="rt">
+          <SupplierPicker
+            items={rail.map((r) => ({
+              id: String(r.id),
+              name: r.name,
+              sub: `${r.products} produk · ${r.units} barang`,
+              badge: <span className={`badge ${PHASE_META[r.phase].cls}`}>{PHASE_META[r.phase].badge}</span>,
+              count: r.picked,
+            }))}
+            value={supplierId}
+            onChange={(id) => {
+              setSupplierId(id)
+              setSearch('')
+            }}
+            desktop={
           <nav className="rt-rail" aria-label="Pilih supplier">
             {rail.map((r) => (
               <button
@@ -255,6 +270,8 @@ export default function ReturPage() {
               </button>
             ))}
           </nav>
+            }
+          />
 
           <section className="rt-main" aria-label={`Barang dari ${supplierName}`}>
             <div className="rt-tools">

@@ -417,7 +417,7 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
       {!noneYet && (activeField || (selectField && pickCounts.size > 1)) && (
         <div className="cp-filters">
           {activeField && (
-            <div className="pills-scroll" role="group" aria-label="Filter status">
+            <div className="pills-scroll pills-wrap" role="group" aria-label="Filter status">
               {(
                 [
                   ['all', 'Semua', counts.all],
@@ -432,7 +432,7 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
             </div>
           )}
           {selectField && pickCounts.size > 1 && (
-            <div className="pills-scroll" role="group" aria-label={`Filter ${selectField.label}`}>
+            <div className="pills-scroll pills-wrap" role="group" aria-label={`Filter ${selectField.label}`}>
               <button type="button" className={`pill${pick === '' ? ' on' : ''}`} aria-pressed={pick === ''} onClick={() => setPick('')}>
                 Semua {selectField.label.toLowerCase()}
               </button>

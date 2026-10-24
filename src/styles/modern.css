@@ -318,3 +318,6 @@ button[type='submit']:hover:not(:disabled),
   html { scroll-behavior: auto; }
   .tile:hover:not(:disabled), .tile:hover:not(:disabled) .tile-img { transform: none; }
 }
+
+/* deretan pil yang melipat ke bawah, tanpa geser samping */
+.pills-scroll.pills-wrap { flex-wrap: wrap; overflow: visible; padding-bottom: 0; -webkit-mask-image: none; mask-image: none; }

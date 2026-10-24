@@ -295,7 +295,7 @@ export default function Setoran() {
         <span className="st-date">{longDate(date)}</span>
       </div>
 
-      <div className="pills-scroll st-days" role="group" aria-label="Pilih hari">
+      <div className="pills-scroll pills-wrap st-days" role="group" aria-label="Pilih hari">
         {days.map((d, i) => (
           <button key={d} type="button" className={`pill${d === date ? ' on' : ''}`} aria-pressed={d === date} onClick={() => changeDate(d)}>
             {dayLabel(d, i)}
@@ -318,7 +318,7 @@ export default function Setoran() {
       </div>
 
       {rows.length > 0 && (
-        <div className="pills-scroll st-filter" role="group" aria-label="Filter status pembayaran">
+        <div className="pills-scroll pills-wrap st-filter" role="group" aria-label="Filter status pembayaran">
           {(
             [
               ['all', 'Semua', rows.length],

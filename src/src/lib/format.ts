@@ -1,0 +1,1 @@
+export const rupiah = (n: number) => `${n < 0 ? '-' : ''}Rp ${Math.abs(n).toLocaleString('id-ID')}`

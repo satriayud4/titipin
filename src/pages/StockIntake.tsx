@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { Check, Grid2X2, List, PackagePlus, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import NewProductModal from '../components/NewProductModal'
 import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
+import SupplierPicker from '../components/SupplierPicker'
 import { useStoredState } from '../lib/prefs'
 import CartDock from '../components/CartDock'
 import { errText } from '../lib/errors'
@@ -18,6 +19,7 @@ const LAST_SUPPLIER_KEY = 'titipin:barangmasuk:supplier'
 
 /** Pilihan tampilan katalog. Kuncinya sama dengan Kasir, jadi memakai gaya yang sama. */
 const VIEW_DEFAULTS = {
+  entry: 'cepat', // cepat = tabel isi langsung, katalog = pilih kartu lalu isi di panel
   view: 'grid',
   size: 'm',
   density: 'comfy',
@@ -27,6 +29,7 @@ const VIEW_DEFAULTS = {
   cartWidth: 'normal',
 }
 const VIEW_GROUPS: OptionGroup[] = [
+  { type: 'seg', key: 'entry', label: 'Cara mengisi', hint: 'Cepat: ketik stok langsung di tabel, Enter pindah ke baris berikutnya.', choices: [{ value: 'cepat', label: 'Cepat (tabel)' }, { value: 'katalog', label: 'Katalog (kartu)' }] },
   { type: 'seg', key: 'view', label: 'Bentuk daftar produk', choices: [{ value: 'grid', label: 'Kartu', icon: Grid2X2 }, { value: 'list', label: 'Daftar', icon: List }, { value: 'compact', label: 'Ringkas' }] },
   { type: 'seg', key: 'size', label: 'Ukuran kartu', choices: [{ value: 's', label: 'Kecil' }, { value: 'm', label: 'Sedang' }, { value: 'l', label: 'Besar' }] },
   { type: 'seg', key: 'density', label: 'Kerapatan', choices: [{ value: 'comfy', label: 'Lega' }, { value: 'tight', label: 'Padat' }] },
@@ -62,7 +65,8 @@ export default function StockIntake() {
   const [loading, setLoading] = useState(true)
   const [supplierId, setSupplierId] = useState('')
   const [history, setHistory] = useState<Map<number, Hist>>(new Map())
-  const [entries, setEntries] = useState<Entry[]>([])
+  // isian disimpan per supplier, jadi berpindah supplier tidak menghapus apa pun
+  const [drafts, setDrafts] = useState<Record<string, Entry[]>>({})
   const [search, setSearch] = useState('')
   const [cat, setCat] = useState('') // '' = semua, 'biasa' = biasa dititip, selain itu = id kategori
   const [sheet, setSheet] = useState(false)
@@ -158,6 +162,13 @@ export default function StockIntake() {
     }
   }, [supplierId])
 
+  const entries = drafts[supplierId] ?? []
+  const setEntries = (next: Entry[] | ((es: Entry[]) => Entry[])) =>
+    setDrafts((d) => ({ ...d, [supplierId]: typeof next === 'function' ? next(d[supplierId] ?? []) : next }))
+  const quick = prefs.entry === 'cepat'
+  // mode cepat: baris tanpa stok dianggap belum diisi dan tidak ikut disimpan
+  const activeOf = (list: Entry[]) => (quick ? list.filter((e) => e.qty.trim() !== '') : list)
+
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
   const supplierName = suppliers.find((s) => String(s.id) === supplierId)?.name ?? ''
@@ -203,17 +214,8 @@ export default function StockIntake() {
     setEntries((es) => es.map((e) => (e.productId === productId ? { ...e, [field]: value } : e)))
   }
 
-  async function changeSupplier(v: string) {
+  function changeSupplier(v: string) {
     if (v === supplierId) return
-    if (entries.length > 0) {
-      const ok = await confirm({
-        title: 'Ganti supplier?',
-        message: 'Daftar barang yang sudah dipilih akan dikosongkan.',
-        confirmText: 'Ya, ganti',
-      })
-      if (!ok) return
-    }
-    setEntries([])
     setSheet(false)
     setSearch('')
     setSupplierId(v)
@@ -227,10 +229,11 @@ export default function StockIntake() {
     }
   }
 
-  function validate(): string {
-    if (!supplierId) return 'Supplier wajib dipilih.'
-    if (entries.length === 0) return 'Pilih minimal satu produk.'
-    for (const e of entries) {
+  const supplierLabel = (sid: string) => suppliers.find((x) => String(x.id) === sid)?.name ?? 'Supplier'
+
+  function validateList(list: Entry[]): string {
+    if (list.length === 0) return 'Pilih minimal satu produk.'
+    for (const e of list) {
       const nm = productById.get(e.productId)?.name ?? 'Produk'
       const qty = Number(e.qty)
       const cost = Number(e.cost)
@@ -242,13 +245,26 @@ export default function StockIntake() {
     return ''
   }
 
-  async function save() {
-    const msg = validate()
-    if (msg) {
-      notify(msg, 'error')
+  /** Simpan isian satu supplier, atau semua supplier yang sudah ada isiannya. */
+  async function saveAll(only?: string) {
+    const sids = only ? [only] : Object.keys(drafts).filter((k) => activeOf(drafts[k] ?? []).length > 0)
+    if (sids.length === 0) {
+      notify('Belum ada barang yang diisi.', 'error')
       return
     }
-    const bad = entries.filter((e) => Number(e.sell) < Number(e.cost)).map((e) => productById.get(e.productId)?.name ?? 'Produk')
+    for (const sid of sids) {
+      const msg = validateList(activeOf(drafts[sid] ?? []))
+      if (msg) {
+        notify(sids.length > 1 ? `${supplierLabel(sid)}: ${msg}` : msg, 'error')
+        if (sid !== supplierId) changeSupplier(sid)
+        return
+      }
+    }
+    const bad = sids.flatMap((sid) =>
+      activeOf(drafts[sid] ?? [])
+        .filter((e) => Number(e.sell) < Number(e.cost))
+        .map((e) => productById.get(e.productId)?.name ?? 'Produk'),
+    )
     if (bad.length > 0) {
       const ok = await confirm({
         title: 'Harga jual di bawah harga supplier',
@@ -259,32 +275,75 @@ export default function StockIntake() {
       if (!ok) return
     }
 
-    const items = []
-    for (const e of entries) {
-      const p = productById.get(e.productId)
-      if (!p) continue
-      items.push({
-        name: p.name,
-        category: catName.get(p.category_id ?? -1) ?? '',
-        qty: Number(e.qty),
-        cost_price: Number(e.cost),
-        sell_price: Number(e.sell),
-        image_path: null,
-      })
-    }
-
     setBusy(true)
-    const { error } = await supabase.rpc('add_stock_batches', { p_supplier_id: Number(supplierId), p_items: items })
-    setBusy(false)
-    if (error) {
-      notify(errText(error), 'error')
-      return
+    const done: string[] = []
+    let count = 0
+    for (const sid of sids) {
+      const list = activeOf(drafts[sid] ?? [])
+      const items = list.flatMap((e) => {
+        const pr = productById.get(e.productId)
+        return pr
+          ? [{ name: pr.name, category: catName.get(pr.category_id ?? -1) ?? '', qty: Number(e.qty), cost_price: Number(e.cost), sell_price: Number(e.sell), image_path: null }]
+          : []
+      })
+      const { error } = await supabase.rpc('add_stock_batches', { p_supplier_id: Number(sid), p_items: items })
+      if (error) {
+        notify(`${supplierLabel(sid)}: ${errText(error)}`, 'error')
+        break
+      }
+      done.push(sid)
+      count += items.length
     }
-    notify(`${items.length} produk dari ${supplierName} dicatat. Harganya diingat untuk input berikutnya.`)
-    setEntries([])
+    setBusy(false)
+    if (done.length === 0) return
+    setDrafts((d) => {
+      const next = { ...d }
+      for (const sid of done) delete next[sid]
+      return next
+    })
     setSheet(false)
+    notify(
+      done.length === 1
+        ? `${count} produk dari ${supplierLabel(done[0])} dicatat. Harganya diingat untuk input berikutnya.`
+        : `${count} produk dari ${done.length} supplier dicatat.`,
+    )
     await loadHistory(supplierId)
+    await loadLists()
   }
+
+  /** Isi satu kolom untuk satu produk langsung dari tabel (mode cepat). */
+  function setCell(p: Product, field: 'qty' | 'cost' | 'sell', value: string) {
+    setEntries((es) => {
+      const i = es.findIndex((e) => e.productId === p.id)
+      if (i === -1) {
+        if (value === '') return es
+        return [...es, { ...blank(p.id), [field]: value }]
+      }
+      const next = es.map((e, j) => (j === i ? { ...e, [field]: value } : e))
+      const e = next[i]
+      const h = history.get(p.id)
+      const untouched = h ? e.cost === String(h.cost) && e.sell === String(h.sell) : e.cost === '' && e.sell === ''
+      return field === 'qty' && value === '' && untouched ? next.filter((_, j) => j !== i) : next
+    })
+  }
+
+  /** Enter pada kolom stok langsung pindah ke baris berikutnya. */
+  function nextQty(ev: KeyboardEvent<HTMLInputElement>) {
+    if (ev.key !== 'Enter') return
+    ev.preventDefault()
+    const all = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-qty]'))
+    all[all.indexOf(ev.currentTarget) + 1]?.focus()
+  }
+
+  // ringkasan semua supplier yang sudah ada isiannya
+  const draftSids = Object.keys(drafts).filter((k) => activeOf(drafts[k] ?? []).length > 0)
+  const all = draftSids.reduce(
+    (t, sid) => {
+      for (const e of activeOf(drafts[sid] ?? [])) t = { products: t.products + 1, qty: t.qty + (Number(e.qty) || 0) }
+      return t
+    },
+    { products: 0, qty: 0 },
+  )
 
   const dockBody = entries.map((e) => {
     const p = productById.get(e.productId)
@@ -331,6 +390,108 @@ export default function StockIntake() {
     )
   })
 
+  const controls = (
+    <>
+            <div className="toolbar pos-toolbar" style={{ marginBottom: 0 }}>
+              <div className="search" style={{ maxWidth: 'none' }}>
+                <Search size={18} />
+                <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <button className="btn-icon" onClick={() => setNewOpen(true)}>
+                <Plus size={16} /> <span className="bm-new-label">Produk baru</span>
+              </button>
+              <ViewOptions groups={VIEW_GROUPS} values={prefs} onChange={(k, v) => setPrefs({ [k]: v } as Partial<typeof prefs>)} onReset={resetPrefs} />
+            </div>
+
+            <div className="pills-scroll pills-wrap">
+              {usualCount > 0 && (
+                <button type="button" className={`pill${cat === 'biasa' ? ' on' : ''}`} onClick={() => setCat('biasa')}>
+                  Biasa dititip ({usualCount})
+                </button>
+              )}
+              <button type="button" className={`pill${cat === '' ? ' on' : ''}`} onClick={() => setCat('')}>Semua</button>
+              {categories.map((c) => (
+                <button key={c.id} type="button" className={`pill${cat === String(c.id) ? ' on' : ''}`} onClick={() => setCat(String(c.id))}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+
+            {!quick && cat === 'biasa' && usualCount > 0 && (
+              <div className="notice notice-info" style={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <span>Produk yang biasa dititip {supplierName}. Harga terakhir terisi otomatis.</span>
+                <button type="button" className="btn-sm" onClick={addUsual}>Pilih semua ({usualCount})</button>
+              </div>
+            )}
+    </>
+  )
+
+  const quickView = (
+    <div className="bm-quickwrap">
+      {controls}
+      {visible.length === 0 ? (
+        <EmptyState
+          title="Tidak ada produk"
+          text={cat === 'biasa' ? 'Belum ada riwayat titipan dari supplier ini. Pilih "Semua" untuk mengisi dari seluruh produk.' : 'Coba ubah pencarian atau kategori.'}
+        />
+      ) : (
+        <div className="bm-quick" role="table" aria-label={`Barang masuk dari ${supplierName}`}>
+          <div className="bm-qhead" aria-hidden="true">
+            <span />
+            <span>Produk</span>
+            <span>Stok</span>
+            <span>Harga supplier</span>
+            <span>Harga jual</span>
+            <span>Laba / pcs</span>
+          </div>
+          {visible.map((p) => {
+            const e = entries.find((x) => x.productId === p.id)
+            const h = history.get(p.id)
+            const cost = e?.cost ?? (h ? String(h.cost) : '')
+            const sell = e?.sell ?? (h ? String(h.sell) : '')
+            const filled = !!e && e.qty.trim() !== ''
+            const margin = cost !== '' && sell !== '' ? Number(sell) - Number(cost) : null
+            return (
+              <div className={`bm-qrow${filled ? ' on' : ''}`} key={p.id} role="row">
+                {p.image_path ? <img className="bm-thumb" src={imageUrl(p.image_path)} alt="" loading="lazy" /> : <span className="bm-thumb" />}
+                <div className="bm-qname">
+                  <strong>{p.name}</strong>
+                  <small>{h ? `Terakhir ${rupiah(h.cost)} / ${rupiah(h.sell)}` : 'Belum pernah dititip supplier ini'}</small>
+                </div>
+                <label className="bm-f bm-f-qty">
+                  <span>Stok</span>
+                  <input
+                    data-qty
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={e?.qty ?? ''}
+                    onFocus={(ev) => ev.currentTarget.select()}
+                    onKeyDown={nextQty}
+                    onChange={(ev) => setCell(p, 'qty', ev.target.value)}
+                    aria-label={`Stok ${p.name}`}
+                  />
+                </label>
+                <label className="bm-f">
+                  <span>Harga supplier</span>
+                  <input type="number" min={0} inputMode="numeric" value={cost} onFocus={(ev) => ev.currentTarget.select()} onChange={(ev) => setCell(p, 'cost', ev.target.value)} aria-label={`Harga supplier ${p.name}`} />
+                </label>
+                <label className="bm-f">
+                  <span>Harga jual</span>
+                  <input type="number" min={0} inputMode="numeric" value={sell} onFocus={(ev) => ev.currentTarget.select()} onChange={(ev) => setCell(p, 'sell', ev.target.value)} aria-label={`Harga jual ${p.name}`} />
+                </label>
+                <span className={`bm-margin${margin !== null && margin < 0 ? ' loss' : ''}`}>
+                  {margin === null ? '' : margin < 0 ? `Rugi ${rupiah(-margin)}` : `+${rupiah(margin)}`}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
   const dockFoot = (
     <>
       <div>
@@ -342,7 +503,7 @@ export default function StockIntake() {
           <span style={{ color: totals.sell - totals.cost < 0 ? 'var(--danger)' : 'var(--success)' }}>{rupiah(totals.sell - totals.cost)}</span>
         </div>
       </div>
-      <button className="btn-primary pay-btn" onClick={() => void save()} disabled={busy || entries.length === 0}>
+      <button className="btn-primary pay-btn" onClick={() => void saveAll(supplierId)} disabled={busy || entries.length === 0}>
         {busy ? 'Menyimpan…' : 'Simpan barang masuk'}
       </button>
     </>
@@ -353,21 +514,34 @@ export default function StockIntake() {
       <PageHeader title="Barang Masuk" subtitle="Pilih supplier, pilih produk yang dititip, lalu isi stok dan harga." />
 
       {!loading && rail.length > 0 && (
+        <SupplierPicker
+          items={rail.map((sp) => ({
+            id: String(sp.id),
+            name: sp.name,
+            sub: recent.get(sp.id)?.products ? `${recent.get(sp.id)?.products} produk biasa` : 'Belum pernah menitip',
+            count: activeOf(drafts[String(sp.id)] ?? []).length,
+          }))}
+          value={supplierId}
+          onChange={changeSupplier}
+          desktop={
         <div className="bm-rail" role="group" aria-label="Pilih supplier">
           {rail.map((sp) => {
             const on = String(sp.id) === supplierId
             const n = recent.get(sp.id)?.products
             return (
-              <button key={sp.id} type="button" className={`bm-sup${on ? ' on' : ''}`} aria-pressed={on} onClick={() => void changeSupplier(String(sp.id))}>
+              <button key={sp.id} type="button" className={`bm-sup${on ? ' on' : ''}`} aria-pressed={on} onClick={() => changeSupplier(String(sp.id))}>
                 <span className="bm-avatar">{sp.name.trim().charAt(0).toUpperCase()}</span>
                 <span className="bm-sup-main">
                   <strong>{sp.name}</strong>
                   <small>{n ? `${n} produk biasa` : 'Belum pernah menitip'}</small>
                 </span>
+                {activeOf(drafts[String(sp.id)] ?? []).length > 0 && <span className="bm-count">{activeOf(drafts[String(sp.id)] ?? []).length}</span>}
               </button>
             )
           })}
         </div>
+          }
+        />
       )}
 
       {loading ? (
@@ -382,40 +556,12 @@ export default function StockIntake() {
           text="Buat produk pertama Anda, lalu pilih untuk dicatat."
           action={<button className="btn-primary" onClick={() => setNewOpen(true)}>Produk baru</button>}
         />
+      ) : quick ? (
+        quickView
       ) : (
         <div className="pos" data-cart={prefs.cart} data-cartw={prefs.cartWidth} data-density={prefs.density}>
           <div className="pos-main">
-            <div className="toolbar pos-toolbar" style={{ marginBottom: 0 }}>
-              <div className="search" style={{ maxWidth: 'none' }}>
-                <Search size={18} />
-                <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
-              </div>
-              <button className="btn-icon" onClick={() => setNewOpen(true)}>
-                <Plus size={16} /> <span className="bm-new-label">Produk baru</span>
-              </button>
-              <ViewOptions groups={VIEW_GROUPS} values={prefs} onChange={(k, v) => setPrefs({ [k]: v } as Partial<typeof prefs>)} onReset={resetPrefs} />
-            </div>
-
-            <div className="pills-scroll">
-              {usualCount > 0 && (
-                <button type="button" className={`pill${cat === 'biasa' ? ' on' : ''}`} onClick={() => setCat('biasa')}>
-                  Biasa dititip ({usualCount})
-                </button>
-              )}
-              <button type="button" className={`pill${cat === '' ? ' on' : ''}`} onClick={() => setCat('')}>Semua</button>
-              {categories.map((c) => (
-                <button key={c.id} type="button" className={`pill${cat === String(c.id) ? ' on' : ''}`} onClick={() => setCat(String(c.id))}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-
-            {cat === 'biasa' && usualCount > 0 && (
-              <div className="notice notice-info" style={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <span>Produk yang biasa dititip {supplierName}. Harga terakhir terisi otomatis.</span>
-                <button type="button" className="btn-sm" onClick={addUsual}>Pilih semua ({usualCount})</button>
-              </div>
-            )}
+            {controls}
 
             {visible.length === 0 ? (
               <EmptyState
@@ -469,6 +615,20 @@ export default function StockIntake() {
             body={dockBody}
             foot={dockFoot}
           />
+        </div>
+      )}
+
+      {quick && draftSids.length > 0 && (
+        <div className="bm-bar" role="region" aria-label="Ringkasan barang masuk">
+          <div className="bm-bar-info">
+            <b>{all.qty} barang</b>
+            <span>
+              dari {all.products} produk · {draftSids.length === 1 ? supplierLabel(draftSids[0]) : `${draftSids.length} supplier`}
+            </span>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => void saveAll()} disabled={busy}>
+            {busy ? 'Menyimpan…' : draftSids.length > 1 ? `Simpan semua (${draftSids.length} supplier)` : 'Simpan barang masuk'}
+          </button>
         </div>
       )}
 

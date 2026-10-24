@@ -1,0 +1,29 @@
+.sp-mobile { display: block; margin-bottom: 4px; }
+.sp-desktop { display: none; }
+@media (min-width: 900px) {
+  .sp-mobile:not(.all) { display: none; }
+  .sp-desktop { display: contents; }
+}
+
+.sp-trigger {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 0; padding: 10px 14px 10px 10px; text-align: left;
+  background: var(--surface); border: 1px solid var(--primary); border-radius: 16px; box-shadow: 0 0 0 3px var(--ring);
+}
+.sp-trigger:hover:not(:disabled) { background: var(--surface); }
+.sp-chev { flex: none; margin-left: auto; color: var(--muted); }
+.sp-trigger .badge, .sp-trigger .sp-count { flex: none; }
+.sp-trigger .badge + .sp-chev, .sp-trigger .sp-count + .sp-chev { margin-left: 0; }
+
+.sp-avatar { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); font-weight: 800; }
+.sp-main { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
+.sp-main small { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.sp-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-main em { font-style: normal; font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sp-count { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 0.75rem; font-weight: 800; }
+
+.sp-list { display: grid; gap: 6px; max-height: min(62dvh, 520px); margin-top: 10px; overflow-y: auto; }
+.sp-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 0; padding: 10px 12px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.sp-item:hover:not(:disabled) { background: var(--surface-2); }
+.sp-item.on { border-color: var(--primary); background: var(--primary-soft); }
+.sp-check { flex: none; color: var(--primary); }
