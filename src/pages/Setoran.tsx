@@ -12,6 +12,7 @@ import { addDays, todayWIB } from '../lib/dates'
 import { useStore } from '../store/StoreContext'
 import { csvBlob, downloadBlob, waNumber, waText, type Cell } from '../lib/export'
 import { renderSetoranImage } from '../lib/setoranImage'
+import './Setoran.css'
 
 interface Report {
   supplier_id: number
@@ -88,6 +89,7 @@ export default function Setoran() {
   const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState<number | null>(null)
   const [share, setShare] = useState<ShareState | null>(null)
+  const [filter, setFilter] = useState<'all' | 'due' | 'done'>('all')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -260,9 +262,18 @@ export default function Setoran() {
   const totalPayable = rows.reduce((n, r) => n + r.total_payable, 0)
   const totalPaid = rows.reduce((n, r) => n + r.total_paid, 0)
   const isToday = date === todayWIB()
+  const dueOf = (r: Report) => Math.max(r.total_payable - r.total_paid, 0)
+  const dueCount = rows.filter((r) => dueOf(r) > 0).length
+  // yang masih harus dibayar (nilai terbesar) di atas, yang sudah beres di bawah
+  const shownRows = [...rows]
+    .filter((r) => filter === 'all' || (filter === 'due') === (dueOf(r) > 0))
+    .sort((a, b) => dueOf(b) - dueOf(a) || a.supplier_name.localeCompare(b.supplier_name))
+  const days = Array.from({ length: 7 }, (_, i) => addDays(todayWIB(), -i))
+  const dayLabel = (d: string, i: number) =>
+    i === 0 ? 'Hari ini' : i === 1 ? 'Kemarin' : new Date(`${d}T00:00:00Z`).toLocaleDateString('id-ID', { timeZone: 'UTC', weekday: 'short', day: 'numeric' })
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div className="st-page">
       <PageHeader
         title="Setoran Supplier"
         subtitle="Tagihan harian ke supplier, dihitung dari barang yang terjual."
@@ -281,7 +292,15 @@ export default function Setoran() {
         <button className="btn-icon" onClick={() => changeDate(addDays(date, 1))} disabled={isToday} aria-label="Hari berikutnya">
           <ChevronRight size={18} />
         </button>
-        {!isToday && <button onClick={() => changeDate(todayWIB())}>Hari ini</button>}
+        <span className="st-date">{longDate(date)}</span>
+      </div>
+
+      <div className="pills-scroll st-days" role="group" aria-label="Pilih hari">
+        {days.map((d, i) => (
+          <button key={d} type="button" className={`pill${d === date ? ' on' : ''}`} aria-pressed={d === date} onClick={() => changeDate(d)}>
+            {dayLabel(d, i)}
+          </button>
+        ))}
       </div>
 
       {isToday && (
@@ -295,7 +314,24 @@ export default function Setoran() {
         <Stat label="Total tagihan" value={rupiah(totalPayable)} />
         <Stat label="Sudah dibayar" value={rupiah(totalPaid)} />
         <Stat label="Sisa" value={rupiah(totalPayable - totalPaid)} />
+        <Stat label="Supplier perlu dibayar" value={`${dueCount} dari ${rows.length}`} />
       </div>
+
+      {rows.length > 0 && (
+        <div className="pills-scroll st-filter" role="group" aria-label="Filter status pembayaran">
+          {(
+            [
+              ['all', 'Semua', rows.length],
+              ['due', 'Perlu dibayar', dueCount],
+              ['done', 'Sudah beres', rows.length - dueCount],
+            ] as ['all' | 'due' | 'done', string, number][]
+          ).map(([key, label, n]) => (
+            <button key={key} type="button" className={`pill${filter === key ? ' on' : ''}`} aria-pressed={filter === key} onClick={() => setFilter(key)}>
+              {label} <span className="st-n">{n}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: 'grid', gap: 14 }}>
@@ -305,28 +341,43 @@ export default function Setoran() {
         </div>
       ) : rows.length === 0 ? (
         <EmptyState title="Belum ada tagihan" text="Tidak ada penjualan atau tagihan supplier pada tanggal ini." />
+      ) : shownRows.length === 0 ? (
+        <EmptyState title="Tidak ada yang cocok" text="Ubah filter untuk melihat supplier lain." />
       ) : (
-        <div style={{ display: 'grid', gap: 14 }}>
-          {rows.map((r) => {
+        <div className="st-grid">
+          {shownRows.map((r) => {
             const st = status(r)
+            const due = dueOf(r)
+            const pct = r.total_payable > 0 ? Math.min(100, Math.round((r.total_paid / r.total_payable) * 100)) : 0
             return (
-              <section key={r.supplier_id} className="panel" style={{ display: 'grid', gap: 12 }}>
+              <section key={r.supplier_id} className={`panel st-card${open === r.supplier_id ? ' open' : ''}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0 }}>{r.supplier_name}</h2>
                   <span className={`badge ${st.cls}`}>{st.text}</span>
+                </div>
+
+                <div className="st-due">
+                  <div className="st-due-top">
+                    <span>{due > 0 ? 'Sisa harus dibayar' : 'Total tagihan'}</span>
+                    <b>{rupiah(due > 0 ? due : r.total_payable)}</b>
+                  </div>
+                  <div className="st-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Pembayaran ${r.supplier_name}`}>
+                    <i style={{ width: `${pct}%` }} />
+                  </div>
+                  <small>
+                    Dibayar {rupiah(r.total_paid)} dari {rupiah(r.total_payable)}
+                  </small>
                 </div>
 
                 <div className="mini-stats">
                   <div className="mini"><span>Terjual</span><b>{r.sold_qty} barang</b></div>
                   <div className="mini"><span>Nilai terjual</span><b>{rupiah(r.sold_cost)}</b></div>
                   {r.rusak_qty > 0 && <div className="mini"><span>Rusak (ditanggung toko)</span><b>{rupiah(r.rusak_cost)}</b></div>}
-                  <div className="mini"><span>Harus dibayar</span><b>{rupiah(r.total_payable)}</b></div>
-                  <div className="mini"><span>Sudah dibayar</span><b>{rupiah(r.total_paid)}</b></div>
                 </div>
 
                 <div className="card-actions">
                   <button
-                    className="btn-primary btn-sm btn-icon"
+                    className={`btn-sm btn-icon${due > 0 ? '' : ' btn-primary'}`}
                     onClick={() => void openShare(r)}
                     disabled={preparing === r.supplier_id}
                   >
@@ -335,7 +386,7 @@ export default function Setoran() {
                   <button className="btn-sm" onClick={() => void toggleDetail(r.supplier_id)}>
                     {open === r.supplier_id ? 'Tutup rincian' : 'Rincian'}
                   </button>
-                  <button className="btn-sm" onClick={() => startPay(r)}>Catat pembayaran</button>
+                  <button className={`btn-sm${due > 0 ? ' btn-primary' : ''}`} onClick={() => startPay(r)}>Catat pembayaran</button>
                 </div>
 
                 {open === r.supplier_id && (

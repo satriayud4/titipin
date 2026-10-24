@@ -1,15 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, PackagePlus, Plus, Search, Trash2 } from 'lucide-react'
+import { Check, Grid2X2, List, PackagePlus, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import NewProductModal from '../components/NewProductModal'
+import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
+import { useStoredState } from '../lib/prefs'
 import CartDock from '../components/CartDock'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
 import { rupiah } from '../lib/format'
+import './BarangMasuk.css'
+
+const LAST_SUPPLIER_KEY = 'titipin:barangmasuk:supplier'
+
+/** Pilihan tampilan katalog. Kuncinya sama dengan Kasir, jadi memakai gaya yang sama. */
+const VIEW_DEFAULTS = {
+  view: 'grid',
+  size: 'm',
+  density: 'comfy',
+  sort: 'usual',
+  showImage: true,
+  cart: 'right',
+  cartWidth: 'normal',
+}
+const VIEW_GROUPS: OptionGroup[] = [
+  { type: 'seg', key: 'view', label: 'Bentuk daftar produk', choices: [{ value: 'grid', label: 'Kartu', icon: Grid2X2 }, { value: 'list', label: 'Daftar', icon: List }, { value: 'compact', label: 'Ringkas' }] },
+  { type: 'seg', key: 'size', label: 'Ukuran kartu', choices: [{ value: 's', label: 'Kecil' }, { value: 'm', label: 'Sedang' }, { value: 'l', label: 'Besar' }] },
+  { type: 'seg', key: 'density', label: 'Kerapatan', choices: [{ value: 'comfy', label: 'Lega' }, { value: 'tight', label: 'Padat' }] },
+  { type: 'seg', key: 'sort', label: 'Urutkan produk', choices: [{ value: 'usual', label: 'Biasa dititip dulu' }, { value: 'name', label: 'A–Z' }] },
+  { type: 'toggle', key: 'showImage', label: 'Tampilkan gambar' },
+  { type: 'seg', key: 'cart', label: 'Posisi daftar (layar lebar)', choices: [{ value: 'right', label: 'Kanan' }, { value: 'left', label: 'Kiri' }] },
+  { type: 'seg', key: 'cartWidth', label: 'Lebar daftar (layar lebar)', choices: [{ value: 'narrow', label: 'Sempit' }, { value: 'normal', label: 'Normal' }, { value: 'wide', label: 'Lebar' }] },
+]
 
 interface Product {
   id: number
@@ -43,13 +68,24 @@ export default function StockIntake() {
   const [sheet, setSheet] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [recent, setRecent] = useState<Map<number, { rank: number; products: number }>>(new Map())
+  const [prefs, setPrefs, resetPrefs] = useStoredState('titipin:barangmasuk:tampilan:v1', VIEW_DEFAULTS)
 
   const loadLists = useCallback(async () => {
-    const [s, c, p] = await Promise.all([
+    const [s, c, p, r] = await Promise.all([
       supabase.from('suppliers').select('id, name').eq('is_active', true).order('name'),
       supabase.from('categories').select('id, name').order('name'),
       supabase.from('products').select('id, name, category_id, image_path').eq('is_active', true).order('name'),
+      supabase.from('stock_batches').select('supplier_id, product_id').order('id', { ascending: false }).limit(600),
     ])
+    // supplier yang paling baru menitip tampil paling depan
+    const rec = new Map<number, { rank: number; products: Set<number> }>()
+    for (const row of (r.data ?? []) as { supplier_id: number; product_id: number }[]) {
+      const cur = rec.get(row.supplier_id) ?? { rank: rec.size, products: new Set<number>() }
+      cur.products.add(row.product_id)
+      rec.set(row.supplier_id, cur)
+    }
+    setRecent(new Map([...rec].map(([id, v]) => [id, { rank: v.rank, products: v.products.size }])))
     if (s.error) notify(errText(s.error), 'error')
     setSuppliers((s.data ?? []) as { id: number; name: string }[])
     setCategories((c.data ?? []) as { id: number; name: string }[])
@@ -95,6 +131,33 @@ export default function StockIntake() {
     })()
   }, [supplierId, loadHistory])
 
+  /** Daftar supplier untuk dipilih: yang paling baru menitip di depan. */
+  const rail = useMemo(
+    () => [...suppliers].sort((a, b) => (recent.get(a.id)?.rank ?? 1e6) - (recent.get(b.id)?.rank ?? 1e6) || a.name.localeCompare(b.name)),
+    [suppliers, recent],
+  )
+
+  // langsung buka supplier terakhir yang dipakai (atau yang paling baru menitip), tanpa harus memilih dulu
+  useEffect(() => {
+    if (loading || supplierId || rail.length === 0) return
+    let saved = ''
+    try {
+      saved = localStorage.getItem(LAST_SUPPLIER_KEY) ?? ''
+    } catch {
+      /* abaikan */
+    }
+    setSupplierId(rail.some((x) => String(x.id) === saved) ? saved : String(rail[0].id))
+  }, [loading, supplierId, rail])
+
+  useEffect(() => {
+    if (!supplierId) return
+    try {
+      localStorage.setItem(LAST_SUPPLIER_KEY, supplierId)
+    } catch {
+      /* abaikan */
+    }
+  }, [supplierId])
+
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
   const supplierName = suppliers.find((s) => String(s.id) === supplierId)?.name ?? ''
@@ -109,7 +172,7 @@ export default function StockIntake() {
       if (cat !== '') return String(p.category_id) === cat
       return true
     })
-    .sort((a, b) => Number(history.has(b.id)) - Number(history.has(a.id)) || a.name.localeCompare(b.name))
+    .sort((a, b) => (prefs.sort === 'usual' ? Number(history.has(b.id)) - Number(history.has(a.id)) : 0) || a.name.localeCompare(b.name))
 
   const totals = entries.reduce(
     (t, e) => {
@@ -289,22 +352,30 @@ export default function StockIntake() {
     <div>
       <PageHeader title="Barang Masuk" subtitle="Pilih supplier, pilih produk yang dititip, lalu isi stok dan harga." />
 
-      <div className="toolbar">
-        <label className="field" style={{ minWidth: 260 }}>
-          <span>Supplier <span className="req">*</span></span>
-          <select value={supplierId} onChange={(e) => void changeSupplier(e.target.value)}>
-            <option value="">— pilih supplier —</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {!loading && rail.length > 0 && (
+        <div className="bm-rail" role="group" aria-label="Pilih supplier">
+          {rail.map((sp) => {
+            const on = String(sp.id) === supplierId
+            const n = recent.get(sp.id)?.products
+            return (
+              <button key={sp.id} type="button" className={`bm-sup${on ? ' on' : ''}`} aria-pressed={on} onClick={() => void changeSupplier(String(sp.id))}>
+                <span className="bm-avatar">{sp.name.trim().charAt(0).toUpperCase()}</span>
+                <span className="bm-sup-main">
+                  <strong>{sp.name}</strong>
+                  <small>{n ? `${n} produk biasa` : 'Belum pernah menitip'}</small>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {loading ? (
         <div className="skeleton" style={{ height: 260, borderRadius: 14 }} />
+      ) : suppliers.length === 0 ? (
+        <EmptyState title="Belum ada supplier aktif" text="Tambahkan supplier di menu Supplier (atau aktifkan yang ada), lalu kembali ke sini untuk mencatat barang masuk." />
       ) : !supplierId ? (
-        <EmptyState title="Pilih supplier dulu" text="Setelah supplier dipilih, katalog produk muncul dan Anda tinggal memilih barang yang dititip." />
+        <div className="skeleton" style={{ height: 260, borderRadius: 14 }} />
       ) : products.length === 0 ? (
         <EmptyState
           title="Belum ada produk"
@@ -312,16 +383,17 @@ export default function StockIntake() {
           action={<button className="btn-primary" onClick={() => setNewOpen(true)}>Produk baru</button>}
         />
       ) : (
-        <div className="pos">
+        <div className="pos" data-cart={prefs.cart} data-cartw={prefs.cartWidth} data-density={prefs.density}>
           <div className="pos-main">
-            <div className="toolbar" style={{ marginBottom: 0 }}>
+            <div className="toolbar pos-toolbar" style={{ marginBottom: 0 }}>
               <div className="search" style={{ maxWidth: 'none' }}>
                 <Search size={18} />
                 <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <button className="btn-icon" onClick={() => setNewOpen(true)}>
-                <Plus size={16} /> Produk baru
+                <Plus size={16} /> <span className="bm-new-label">Produk baru</span>
               </button>
+              <ViewOptions groups={VIEW_GROUPS} values={prefs} onChange={(k, v) => setPrefs({ [k]: v } as Partial<typeof prefs>)} onReset={resetPrefs} />
             </div>
 
             <div className="pills-scroll">
@@ -351,7 +423,7 @@ export default function StockIntake() {
                 text={cat === 'biasa' ? 'Belum ada riwayat titipan dari supplier ini.' : 'Coba ubah pencarian atau kategori. Produk yang belum ada bisa dibuat lewat tombol Produk baru.'}
               />
             ) : (
-              <div className="pos-grid">
+              <div className="pos-grid" data-view={prefs.view} data-size={prefs.size} data-img={prefs.showImage ? 'on' : 'off'}>
                 {visible.map((p) => {
                   const sel = selectedIds.has(p.id)
                   const h = history.get(p.id)

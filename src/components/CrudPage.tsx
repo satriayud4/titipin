@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react'
-import { ImagePlus, Package, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react'
+import { ImagePlus, MessageCircle, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from './Toast'
@@ -7,8 +7,11 @@ import { useConfirm } from './ConfirmDialog'
 import Modal from './Modal'
 import PageHeader from './PageHeader'
 import EmptyState from './EmptyState'
+import ViewOptions, { type OptionGroup } from './ViewOptions'
+import { useStoredState } from '../lib/prefs'
 import { imageUrl, uploadProductImage } from '../lib/image'
 import { errText } from '../lib/errors'
+import './CrudPage.css'
 
 export interface Field {
   key: string
@@ -27,6 +30,17 @@ interface Props {
   table: string
   fields: Field[]
   layout?: 'list' | 'grid'
+  /** Angka pendamping dari tabel lain, mis. jumlah produk per kategori atau stok per produk. */
+  relation?: {
+    table: string
+    fk: string
+    /** jumlahkan kolom ini; kosong = hitung baris */
+    sumColumn?: string
+    /** hanya baris dengan sumColumn > 0 */
+    positiveOnly?: boolean
+    render: (n: number) => string
+    sortLabel?: string
+  }
 }
 
 type Row = Record<string, unknown>
@@ -34,7 +48,16 @@ type FormState = Record<string, string | boolean>
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-export default function CrudPage({ title, subtitle, noun, table, fields, layout = 'list' }: Props) {
+type Status = 'all' | 'on' | 'off'
+const VIEW_DEFAULTS = { view: 'cards', size: 'm', sort: 'name' }
+
+/** 0812… → 62812… untuk tautan WhatsApp */
+const waNumber = (raw: string) => {
+  const d = raw.replace(/\D/g, '')
+  return d.startsWith('0') ? `62${d.slice(1)}` : d
+}
+
+export default function CrudPage({ title, subtitle, noun, table, fields, relation }: Props) {
   const notify = useToast()
   const confirm = useConfirm()
   const { profile } = useAuth()
@@ -42,6 +65,10 @@ export default function CrudPage({ title, subtitle, noun, table, fields, layout 
   const titleKey = fields.find((f) => f.type === 'text')?.key ?? 'name'
   const imageField = fields.find((f) => f.type === 'image')
   const activeField = fields.find((f) => f.type === 'checkbox')
+  const selectField = fields.find((f) => f.type === 'select')
+  const phoneField = fields.find((f) => f.key === 'phone')
+  // satu-satunya isian wajib hanyalah nama (mis. Kategori): cukup ketik di kolom tambah cepat
+  const quickAdd = !imageField && fields.filter((f) => f.required).length === 1 && fields.find((f) => f.required)?.key === titleKey
 
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,12 +79,37 @@ export default function CrudPage({ title, subtitle, noun, table, fields, layout 
   const [preview, setPreview] = useState<string | null>(null)
   const [existingPath, setExistingPath] = useState('')
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<Status>('all')
+  const [pick, setPick] = useState('')
+  const [stat, setStat] = useState<Map<number, number>>(new Map())
+  const [quickName, setQuickName] = useState('')
+  const quickRef = useRef<HTMLInputElement>(null)
+  const [prefs, setPrefs, resetPrefs] = useStoredState(`titipin:${table}:tampilan:v1`, VIEW_DEFAULTS)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from(table).select('*').order('id')
     if (error) notify(errText(error), 'error')
     else setRows(data ?? [])
     setLoading(false)
+
+    if (relation) {
+      let query = supabase
+        .from(relation.table)
+        .select(relation.sumColumn ? `${relation.fk}, ${relation.sumColumn}` : relation.fk)
+        .limit(5000)
+      if (relation.sumColumn && relation.positiveOnly) query = query.gt(relation.sumColumn, 0)
+      const r = await query
+      if (!r.error) {
+        const m = new Map<number, number>()
+        for (const x of (r.data ?? []) as unknown as Record<string, number | null>[]) {
+          const k = x[relation.fk]
+          if (k == null) continue
+          m.set(Number(k), (m.get(Number(k)) ?? 0) + (relation.sumColumn ? Number(x[relation.sumColumn] ?? 0) : 1))
+        }
+        setStat(m)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table, notify])
 
   useEffect(() => {
@@ -183,10 +235,91 @@ export default function CrudPage({ title, subtitle, noun, table, fields, layout 
     await load()
   }
 
+  async function toggleActive(row: Row) {
+    if (!activeField) return
+    const next = !row[activeField.key]
+    setRows((cur) => cur.map((r) => (r.id === row.id ? { ...r, [activeField.key]: next } : r)))
+    const { data, error } = await supabase.from(table).update({ [activeField.key]: next }).eq('id', row.id as number).select('id')
+    if (error || !data || data.length === 0) {
+      setRows((cur) => cur.map((r) => (r.id === row.id ? { ...r, [activeField.key]: !next } : r)))
+      notify(error ? errText(error) : 'Perubahan ditolak. Hanya admin yang boleh mengubah data.', 'error')
+      return
+    }
+    notify(`${String(row[titleKey] ?? '')} ${next ? 'diaktifkan' : 'dinonaktifkan'}.`)
+  }
+
+  async function addQuick(e: FormEvent) {
+    e.preventDefault()
+    const name = quickName.trim()
+    if (!name) return
+    if (rows.some((r) => String(r[titleKey] ?? '').trim().toLowerCase() === name.toLowerCase())) {
+      notify(`${cap(noun)} "${name}" sudah ada.`, 'error')
+      return
+    }
+    setBusy(true)
+    const payload: Row = { [titleKey]: name }
+    fields.forEach((fl) => {
+      if (fl.type === 'checkbox') payload[fl.key] = fl.defaultValue ?? true
+    })
+    const { error } = await supabase.from(table).insert(payload)
+    setBusy(false)
+    if (error) {
+      notify(errText(error), 'error')
+      return
+    }
+    setQuickName('')
+    notify(`${cap(noun)} "${name}" ditambahkan.`)
+    await load()
+    quickRef.current?.focus()
+  }
+
   const q = search.trim().toLowerCase()
+  const statOf = (r: Row) => stat.get(r.id as number) ?? 0
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      on: activeField ? rows.filter((r) => Boolean(r[activeField.key])).length : 0,
+      off: activeField ? rows.filter((r) => !r[activeField.key]).length : 0,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows],
+  )
+  const pickCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    if (selectField) for (const r of rows) m.set(String(r[selectField.key] ?? ''), (m.get(String(r[selectField.key] ?? '')) ?? 0) + 1)
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
   const shown = rows
     .filter((r) => !q || String(r[titleKey] ?? '').toLowerCase().includes(q))
-    .sort((a, b) => String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? '')))
+    .filter((r) => status === 'all' || (activeField && (status === 'on') === Boolean(r[activeField.key])))
+    .filter((r) => !pick || !selectField || String(r[selectField.key] ?? '') === pick)
+    .sort((a, b) => {
+      if (prefs.sort === 'new') return Number(b.id) - Number(a.id)
+      if (prefs.sort === 'stat' && relation) return statOf(b) - statOf(a) || String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''))
+      return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''))
+    })
+
+  const viewGroups: OptionGroup[] = [
+    { type: 'seg', key: 'view', label: 'Tampilan', choices: [{ value: 'cards', label: 'Kartu' }, { value: 'list', label: 'Daftar' }] },
+    {
+      type: 'seg',
+      key: 'size',
+      label: 'Ukuran kartu',
+      hidden: !imageField || prefs.view !== 'cards',
+      choices: [{ value: 's', label: 'Kecil' }, { value: 'm', label: 'Sedang' }, { value: 'l', label: 'Besar' }],
+    },
+    {
+      type: 'seg',
+      key: 'sort',
+      label: 'Urutkan',
+      choices: [
+        { value: 'name', label: 'A–Z' },
+        { value: 'new', label: 'Terbaru' },
+        ...(relation ? [{ value: 'stat', label: relation.sortLabel ?? 'Terbanyak' }] : []),
+      ],
+    },
+  ]
 
   // lencana (kategori, status) dan baris keterangan tambahan tiap data
   function badges(row: Row) {
@@ -213,81 +346,174 @@ export default function CrudPage({ title, subtitle, noun, table, fields, layout 
       ))
   const isOff = (row: Row) => (activeField ? !row[activeField.key] : false)
 
-  const actions = (row: Row, cls: string) =>
-    isAdmin && (
+  const statChip = (row: Row) => {
+    if (!relation) return null
+    const n = statOf(row)
+    return <span className={`cp-stat${n === 0 ? ' zero' : ''}`}>{relation.render(n)}</span>
+  }
+
+  const actions = (row: Row, cls: string) => {
+    const phone = phoneField ? String(row[phoneField.key] ?? '') : ''
+    return (
       <div className={cls}>
-        <button className="btn-sm btn-icon" onClick={() => openEdit(row)}>
-          <Pencil size={15} /> Ubah
-        </button>
-        <button className="btn-sm btn-icon btn-danger" onClick={() => void remove(row)}>
-          <Trash2 size={15} /> Hapus
-        </button>
+        {phone && (
+          <a className="btn-sm btn-icon cp-wa" href={`https://wa.me/${waNumber(phone)}`} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${String(row[titleKey] ?? '')}`}>
+            <MessageCircle size={15} /> WhatsApp
+          </a>
+        )}
+        {isAdmin && (
+          <>
+            {activeField && (
+              <button
+                type="button"
+                className="cp-switch"
+                role="switch"
+                aria-checked={Boolean(row[activeField.key])}
+                aria-label={`${Boolean(row[activeField.key]) ? 'Nonaktifkan' : 'Aktifkan'} ${String(row[titleKey] ?? '')}`}
+                title={Boolean(row[activeField.key]) ? 'Aktif. Ketuk untuk menonaktifkan' : 'Nonaktif. Ketuk untuk mengaktifkan'}
+                onClick={() => void toggleActive(row)}
+              />
+            )}
+            <button className="btn-sm btn-icon" onClick={() => openEdit(row)}>
+              <Pencil size={15} /> Ubah
+            </button>
+            <button className="btn-sm btn-icon btn-danger" onClick={() => void remove(row)} aria-label={`Hapus ${String(row[titleKey] ?? '')}`}>
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
       </div>
     )
+  }
+
+  const noneYet = rows.length === 0
+  const imgCards = Boolean(imageField) && prefs.view === 'cards'
 
   return (
-    <div style={{ maxWidth: layout === 'grid' ? 1100 : 860 }}>
+    <div className="cp">
       <PageHeader
         title={title}
         subtitle={subtitle ?? `${rows.length} ${noun}`}
         actions={
-          <button className="btn-primary btn-icon" onClick={openNew}>
+          <button className="btn-primary btn-icon" onClick={quickAdd ? () => quickRef.current?.focus() : openNew}>
             <Plus size={18} /> Tambah {noun}
           </button>
         }
       />
 
-      <div className="toolbar">
+      <div className="cp-tools">
         <div className="search">
           <Search size={18} />
           <input placeholder={`Cari ${noun}…`} value={search} onChange={(e) => setSearch(e.target.value)} />
+          {search && (
+            <button type="button" className="icon-btn" aria-label="Hapus pencarian" onClick={() => setSearch('')}>
+              <X size={15} />
+            </button>
+          )}
         </div>
+        <ViewOptions groups={viewGroups} values={prefs} onChange={(k, v) => setPrefs({ [k]: v } as Partial<typeof prefs>)} onReset={resetPrefs} />
       </div>
 
+      {!noneYet && (activeField || (selectField && pickCounts.size > 1)) && (
+        <div className="cp-filters">
+          {activeField && (
+            <div className="pills-scroll" role="group" aria-label="Filter status">
+              {(
+                [
+                  ['all', 'Semua', counts.all],
+                  ['on', 'Aktif', counts.on],
+                  ['off', 'Nonaktif', counts.off],
+                ] as [Status, string, number][]
+              ).map(([key, label, n]) => (
+                <button key={key} type="button" className={`pill${status === key ? ' on' : ''}`} aria-pressed={status === key} onClick={() => setStatus(key)}>
+                  {label} <span className="cp-n">{n}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {selectField && pickCounts.size > 1 && (
+            <div className="pills-scroll" role="group" aria-label={`Filter ${selectField.label}`}>
+              <button type="button" className={`pill${pick === '' ? ' on' : ''}`} aria-pressed={pick === ''} onClick={() => setPick('')}>
+                Semua {selectField.label.toLowerCase()}
+              </button>
+              {(selectField.options ?? [])
+                .filter((o) => pickCounts.has(String(o.value)))
+                .map((o) => (
+                  <button key={o.value} type="button" className={`pill${pick === String(o.value) ? ' on' : ''}`} aria-pressed={pick === String(o.value)} onClick={() => setPick(pick === String(o.value) ? '' : String(o.value))}>
+                    {o.label} <span className="cp-n">{pickCounts.get(String(o.value))}</span>
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {quickAdd && (
+        <form className="cp-quick" onSubmit={(e) => void addQuick(e)}>
+          <input ref={quickRef} placeholder={`Ketik nama ${noun} baru, lalu Enter`} value={quickName} onChange={(e) => setQuickName(e.target.value)} maxLength={80} aria-label={`Nama ${noun} baru`} />
+          <button type="submit" className="btn-primary btn-icon" disabled={busy || !quickName.trim()}>
+            <Plus size={16} /> Tambah
+          </button>
+        </form>
+      )}
+
       {loading ? (
-        <div className={layout === 'grid' ? 'catalog' : ''} style={layout === 'grid' ? undefined : { display: 'grid', gap: 10 }}>
+        <div className={imgCards ? 'catalog cp-grid' : 'cp-list'} data-size={prefs.size}>
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="skeleton" style={{ height: layout === 'grid' ? 240 : 76, borderRadius: 14 }} />
+            <div key={i} className="skeleton" style={{ height: imgCards ? 250 : 84, borderRadius: 16 }} />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : noneYet ? (
         <EmptyState
           title={`Belum ada ${noun}`}
           text={`Tambahkan ${noun} pertama Anda.`}
-          action={<button className="btn-primary" onClick={openNew}>Tambah {noun}</button>}
+          action={quickAdd ? undefined : <button className="btn-primary" onClick={openNew}>Tambah {noun}</button>}
         />
       ) : shown.length === 0 ? (
-        <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian." />
-      ) : layout === 'grid' ? (
-        <div className="catalog">
-          {shown.map((row, i) => {
+        <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian atau filter." />
+      ) : imgCards ? (
+        <div className="catalog cp-grid" data-size={prefs.size}>
+          {shown.map((row) => {
             const img = imageField ? (row[imageField.key] as string | null) : null
             return (
-              <article key={row.id as number} className={`pcard${isOff(row) ? ' off' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
-                {img ? <img className="pcard-img" src={imageUrl(img)} alt="" loading="lazy" /> : <div className="pcard-img"><Package size={34} /></div>}
+              <article key={row.id as number} className={`pcard cp-card${isOff(row) ? ' off' : ''}`}>
+                <div className="cp-media">
+                  {img ? <img src={imageUrl(img)} alt="" loading="lazy" /> : <Package size={34} />}
+                  {statChip(row)}
+                </div>
                 <div className="pcard-body">
                   <div className="pcard-title">{String(row[titleKey] ?? '')}</div>
                   <div className="tags">{badges(row)}</div>
                   {metaLines(row)}
                 </div>
-                {actions(row, 'card-actions')}
+                {actions(row, 'cp-actions')}
               </article>
             )
           })}
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
-          {shown.map((row) => (
-            <div key={row.id as number} className={`urow${isOff(row) ? ' off' : ''}`}>
-              <span className="avatar">{String(row[titleKey] ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>
-              <div className="urow-main">
-                <div style={{ fontWeight: 700 }}>{String(row[titleKey] ?? '')}</div>
-                {metaLines(row)}
-                <div className="tags" style={{ marginTop: 6 }}>{badges(row)}</div>
-              </div>
-              {actions(row, 'urow-actions')}
-            </div>
-          ))}
+        <div className={`cp-list${prefs.view === 'list' ? ' single' : ''}`}>
+          {shown.map((row) => {
+            const img = imageField ? (row[imageField.key] as string | null) : null
+            return (
+              <article key={row.id as number} className={`cp-item${isOff(row) ? ' off' : ''}`}>
+                {imageField ? (
+                  img ? <img className="cp-thumb" src={imageUrl(img)} alt="" loading="lazy" /> : <span className="cp-thumb"><Package size={20} /></span>
+                ) : (
+                  <span className="avatar">{String(row[titleKey] ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>
+                )}
+                <div className="cp-item-main">
+                  <strong>{String(row[titleKey] ?? '')}</strong>
+                  {metaLines(row)}
+                  <div className="tags">
+                    {badges(row)}
+                    {statChip(row)}
+                  </div>
+                </div>
+                {actions(row, 'cp-actions')}
+              </article>
+            )
+          })}
         </div>
       )}
 

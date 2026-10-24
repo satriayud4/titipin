@@ -1,0 +1,14 @@
+/* pilihan supplier cepat: chip geser, yang aktif menonjol */
+.bm-rail { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; margin: 0 -2px 6px; scroll-snap-type: x proximity; }
+.bm-sup {
+  display: flex; align-items: center; gap: 10px; flex: none; min-width: 190px; min-height: 0; padding: 8px 14px 8px 8px;
+  text-align: left; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); scroll-snap-align: start;
+}
+.bm-sup:hover:not(:disabled) { background: var(--surface); }
+.bm-sup.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: 0 0 0 3px var(--ring); }
+.bm-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 11px; background: var(--surface-2); color: var(--primary); font-weight: 800; }
+.bm-sup.on .bm-avatar { background: var(--primary); color: var(--on-primary); }
+.bm-sup-main { display: grid; min-width: 0; line-height: 1.25; }
+.bm-sup-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-sup-main small { white-space: nowrap; }
+@media (max-width: 599.98px) { .bm-new-label { display: none; } }
