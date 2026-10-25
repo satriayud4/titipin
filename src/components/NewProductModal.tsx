@@ -1,37 +1,67 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { Camera, ImagePlus, RefreshCw, Store, Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { uploadProductImage } from '../lib/image'
+import { imageUrl, removeImage, uploadProductImage } from '../lib/image'
 import { useToast } from './Toast'
 import Modal from './Modal'
 import { errText } from '../lib/errors'
 import './NewProductModal.css'
+
+export interface EditableProduct {
+  id: number
+  name: string
+  category_id: number | null
+  image_path: string | null
+  unit: string | null
+}
 
 interface Props {
   supplierId: number
   supplierName?: string
   categories: { id: number; name: string }[]
   onClose: () => void
-  onCreated: (productId: number) => void | Promise<void>
+  /** Dipanggil setelah produk baru dibuat. */
+  onCreated?: (productId: number) => void | Promise<void>
+  /** Isi untuk mode ubah: form terisi data produk ini dan gambar boleh tidak diganti. */
+  product?: EditableProduct
+  onSaved?: (productId: number) => void | Promise<void>
 }
 
 const UNITS = ['pcs', 'pack', 'bungkus', 'botol', 'box', 'kg', 'porsi']
 
-export default function NewProductModal({ supplierId, supplierName, categories, onClose, onCreated }: Props) {
+export default function NewProductModal({ supplierId, supplierName, categories, onClose, onCreated, product, onSaved }: Props) {
   const notify = useToast()
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState('')
-  const [unit, setUnit] = useState('pcs')
+  const editing = !!product
+  const [name, setName] = useState(product?.name ?? '')
+  const [category, setCategory] = useState(() => categories.find((c) => c.id === product?.category_id)?.name ?? '')
+  const [unit, setUnit] = useState(product?.unit ?? 'pcs')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [drag, setDrag] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [siblings, setSiblings] = useState<{ id: number; name: string }[]>([])
   const previewRef = useRef<string | null>(null)
   previewRef.current = preview
 
   useEffect(() => () => {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current)
   }, [])
+
+  // nama barang yang sudah dimiliki supplier ini, untuk peringatan duplikat
+  useEffect(() => {
+    if (!supplierId) return
+    let cancelled = false
+    void supabase
+      .from('products')
+      .select('id, name')
+      .eq('supplier_id', supplierId)
+      .then(({ data }) => {
+        if (!cancelled) setSiblings((data ?? []) as { id: number; name: string }[])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [supplierId])
 
   function pick(f: File | null) {
     if (!f) return
@@ -57,17 +87,23 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
   }, [categories, category])
   const catIsNew = category.trim() !== '' && !categories.some((c) => c.name.toLowerCase() === category.trim().toLowerCase())
 
+  const dup = siblings.find((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase() && s.id !== product?.id)
+  const initialCategory = categories.find((c) => c.id === product?.category_id)?.name ?? ''
+  const dirty = name !== (product?.name ?? '') || category !== initialCategory || unit !== (product?.unit ?? 'pcs') || file !== null
+
   async function save(e: FormEvent) {
     e.preventDefault()
     if (name.trim() === '') return notify('Nama produk wajib diisi.', 'error')
+    if (dup) return notify(`Barang "${dup.name}" sudah ada${supplierName ? ` untuk ${supplierName}` : ''}. Pilih barang itu di daftar, atau gunakan nama lain.`, 'error')
     if (category.trim() === '') return notify('Kategori wajib diisi.', 'error')
     if (unit.trim() === '') return notify('Satuan wajib diisi.', 'error')
-    if (!file) return notify('Gambar produk wajib diunggah. Ambil foto atau pilih gambar terlebih dahulu.', 'error')
-    if (!supplierId) return notify('Pilih supplier terlebih dahulu.', 'error')
+    if (!editing && !file) return notify('Gambar produk wajib diunggah. Ambil foto atau pilih gambar terlebih dahulu.', 'error')
+    if (editing && !file && !product?.image_path) return notify('Gambar produk wajib ada. Ambil foto atau pilih gambar terlebih dahulu.', 'error')
+    if (!editing && !supplierId) return notify('Pilih supplier terlebih dahulu.', 'error')
 
     setBusy(true)
     try {
-      const image = await uploadProductImage(file)
+      const image = file ? await uploadProductImage(file) : (product?.image_path as string)
 
       // kategori: pakai yang sudah ada, atau buat baru
       let catId = categories.find((c) => c.name.toLowerCase() === category.trim().toLowerCase())?.id
@@ -75,6 +111,18 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
         const { data, error } = await supabase.from('categories').insert({ name: category.trim() }).select('id').single()
         if (error) throw error
         catId = data.id as number
+      }
+
+      if (product) {
+        const { error } = await supabase
+          .from('products')
+          .update({ name: name.trim(), category_id: catId, unit: unit.trim(), image_path: image })
+          .eq('id', product.id)
+        if (error) throw error
+        if (file && product.image_path && product.image_path !== image) void removeImage(product.image_path, 'product-images').catch(() => undefined)
+        notify('Produk diperbarui.')
+        await onSaved?.(product.id)
+        return
       }
 
       const { data: prod, error } = await supabase
@@ -85,7 +133,7 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
       if (error) throw error
 
       notify('Produk baru ditambahkan.')
-      await onCreated(prod.id as number)
+      await onCreated?.(prod.id as number)
     } catch (err) {
       notify(errText(err), 'error')
     } finally {
@@ -95,17 +143,18 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
 
   return (
     <Modal
-      title="Produk baru"
+      dirty={dirty}
+      title={editing ? 'Ubah produk' : 'Produk baru'}
       onClose={() => !busy && onClose()}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}>Batal</button>
-          <button type="submit" form="np-form" className="btn-primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan produk'}</button>
+          <button type="submit" form="np-form" className="btn-primary" disabled={busy}>{busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan produk'}</button>
         </>
       }
     >
       <form id="np-form" noValidate onSubmit={(e) => void save(e)} className="np-form">
-        {supplierName && (
+        {!editing && supplierName && (
           <div className="np-owner">
             <Store size={16} />
             <span>Milik supplier <b>{supplierName}</b></span>
@@ -114,13 +163,13 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
 
         <div className="np-photo-wrap">
           <div
-            className={`np-drop${drag ? ' drag' : ''}${preview ? ' has' : ''}`}
+            className={`np-drop${drag ? ' drag' : ''}${preview || product?.image_path ? ' has' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
             onDragLeave={() => setDrag(false)}
             onDrop={onDrop}
           >
-            {preview ? (
-              <img src={preview} alt="Pratinjau gambar produk" />
+            {preview || product?.image_path ? (
+              <img src={preview ?? imageUrl(product!.image_path!)} alt="Pratinjau gambar produk" />
             ) : (
               <div className="np-drop-empty">
                 <ImagePlus size={34} />
@@ -131,11 +180,11 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
           </div>
           <div className="np-photo-actions">
             <label className="np-btn">
-              <Camera size={17} /> {preview ? 'Foto ulang' : 'Ambil foto'}
+              <Camera size={17} /> {preview || product?.image_path ? 'Foto ulang' : 'Ambil foto'}
               <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { pick(e.target.files?.[0] ?? null); e.target.value = '' }} />
             </label>
             <label className="np-btn">
-              {preview ? <RefreshCw size={17} /> : <Upload size={17} />} {preview ? 'Ganti gambar' : 'Pilih gambar'}
+              {preview || product?.image_path ? <RefreshCw size={17} /> : <Upload size={17} />} {preview || product?.image_path ? 'Ganti gambar' : 'Pilih gambar'}
               <input type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0] ?? null); e.target.value = '' }} />
             </label>
           </div>
@@ -144,6 +193,11 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
         <label className="field">
           <span>Nama produk <span className="req">*</span></span>
           <input value={name} placeholder="Contoh: Keripik Singkong Pedas" autoFocus onChange={(e) => setName(e.target.value)} />
+          {dup && (
+            <span className="hint" style={{ color: 'var(--warning)' }}>
+              Barang ini sudah ada{supplierName ? ` untuk ${supplierName}` : ''}. Pilih dari daftar barang, atau gunakan nama lain.
+            </span>
+          )}
         </label>
 
         <div className="field">

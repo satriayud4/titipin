@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import PageHeader from '../components/PageHeader'
+import DateRangePicker from '../components/DateRangePicker'
 import EmptyState from '../components/EmptyState'
 import SaleDetailModal, { trxLabel } from '../components/SaleDetailModal'
 import { errText } from '../lib/errors'
@@ -116,12 +117,7 @@ export default function Riwayat() {
             </button>
           ))}
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Dari <input type="date" value={from} max={today} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Sampai <input type="date" value={to} max={today} onChange={(e) => setTo(e.target.value)} />
-        </label>
+        <DateRangePicker from={from} to={to} max={today} onChange={(f, t) => { setFrom(f); setTo(t) }} />
       </div>
 
       <div className="toolbar">

@@ -3,6 +3,7 @@ import { Download, Printer } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import BarList from '../components/BarList'
 import PageHeader from '../components/PageHeader'
+import DateRangePicker from '../components/DateRangePicker'
 import EmptyState from '../components/EmptyState'
 import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
@@ -110,12 +111,7 @@ export default function Laporan() {
             </button>
           ))}
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Dari <input type="date" value={from} max={today} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Sampai <input type="date" value={to} max={today} onChange={(e) => setTo(e.target.value)} />
-        </label>
+        <DateRangePicker from={from} to={to} max={today} onChange={(f, t) => { setFrom(f); setTo(t) }} />
       </div>
 
       {loading && !data && <div className="skeleton" style={{ height: 220, borderRadius: 14 }} />}

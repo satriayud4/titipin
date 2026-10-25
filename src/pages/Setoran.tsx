@@ -167,15 +167,19 @@ export default function Setoran() {
   }, [focus, loading, loadedDate, rows])
 
   async function fetchDetail(supplierId: number) {
-    const [d, p, n] = await Promise.all([
+    const [d, p, n, n2] = await Promise.all([
       supabase.rpc('supplier_settlement_detail', { p_date: date, p_supplier_id: supplierId }),
       supabase.rpc('supplier_payments', { p_date: date, p_supplier_id: supplierId }),
       supabase.rpc('supplier_promo_notes', { p_date: date, p_supplier_id: supplierId }),
+      supabase.rpc('promo_rule_notes', { p_date: date, p_supplier_id: supplierId }),
     ])
     if (d.error) throw d.error
     if (p.error) throw p.error
     // SQL promo belum dijalankan -> rincian setoran tetap jalan tanpa catatan promo
-    const promo = n.error ? [] : ((n.data ?? []) as PromoNoteRow[])
+    const promo = [
+      ...(n.error ? [] : ((n.data ?? []) as PromoNoteRow[])),
+      ...(n2.error ? [] : ((n2.data ?? []) as PromoNoteRow[]).map((r) => ({ ...r, campaign_id: r.campaign_id + 1_000_000 }))),
+    ]
     return { details: (d.data ?? []) as Detail[], payments: (p.data ?? []) as Payment[], promo }
   }
 

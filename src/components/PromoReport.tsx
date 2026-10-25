@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { rupiah } from '../lib/format'
-import { shareLabel, shortDate } from '../lib/promo'
+import { discountLabel, shareLabel, shortDate, type DiscountType } from '../lib/promo'
 
 interface Row {
   id: number
   name: string
   discount_percent: number
+  discount_type?: DiscountType
+  discount_value?: number
   supplier_share: number
   started_on: string
   qty: number
@@ -27,9 +29,26 @@ export default function PromoReport({ from, to }: { from: string; to: string }) 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const { data: d, error } = await supabase.rpc('promo_report', { p_from: from, p_to: to })
+      // promo baru dan promo lama digabung; salah satunya boleh belum dipasang
+      const [a, b] = await Promise.all([
+        supabase.rpc('promo_rule_report', { p_from: from, p_to: to }),
+        supabase.rpc('promo_report', { p_from: from, p_to: to }),
+      ])
       if (cancelled) return
-      setData(error ? null : (d as Report))
+      const parts = [a, b].filter((x) => !x.error && x.data).map((x) => x.data as Report)
+      if (parts.length === 0) return setData(null)
+      const sum = (k: keyof Report['summary']) => parts.reduce((n, p) => n + Number(p.summary[k] ?? 0), 0)
+      setData({
+        summary: {
+          campaigns: sum('campaigns'),
+          qty: sum('qty'),
+          revenue: sum('revenue'),
+          discount: sum('discount'),
+          supplier_absorb: sum('supplier_absorb'),
+          store_absorb: sum('store_absorb'),
+        },
+        rows: parts.flatMap((p) => p.rows).sort((x, y) => (y.started_on > x.started_on ? 1 : y.started_on < x.started_on ? -1 : 0)),
+      })
     })()
     return () => {
       cancelled = true
@@ -43,7 +62,7 @@ export default function PromoReport({ from, to }: { from: string; to: string }) 
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>Promo expired</h2>
+          <h2>Promo & diskon</h2>
           <div className="panel-sub">Penjualan dengan potongan harga pada periode ini.</div>
         </div>
       </div>
@@ -74,13 +93,13 @@ export default function PromoReport({ from, to }: { from: string; to: string }) 
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.id}>
+                {data.rows.map((r, i) => (
+                  <tr key={`${r.id}-${i}`}>
                     <td>
                       {r.name}
                       <div className="page-sub">mulai {shortDate(r.started_on)} · {shareLabel(r.supplier_share)}</div>
                     </td>
-                    <td className="num">{r.discount_percent}%</td>
+                    <td className="num">{discountLabel(r.discount_type ?? 'percent', r.discount_value ?? r.discount_percent)}</td>
                     <td className="num">{r.qty}</td>
                     <td className="num">{rupiah(r.revenue)}</td>
                     <td className="num">{rupiah(r.discount)}</td>

@@ -9,6 +9,9 @@ import PageHeader from './PageHeader'
 import EmptyState from './EmptyState'
 import ViewOptions, { type OptionGroup } from './ViewOptions'
 import { useStoredState } from '../lib/prefs'
+import Pagination, { usePaged } from './Pagination'
+import BulkBar from './BulkBar'
+import SelectSheet from './SelectSheet'
 import { imageUrl, uploadProductImage } from '../lib/image'
 import { errText } from '../lib/errors'
 import './CrudPage.css'
@@ -83,6 +86,8 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
   const [pick, setPick] = useState('')
   const [stat, setStat] = useState<Map<number, number>>(new Map())
   const [quickName, setQuickName] = useState('')
+  const [initialForm, setInitialForm] = useState('')
+  const [picked, setPicked] = useState<Set<number>>(new Set())
   const quickRef = useRef<HTMLInputElement>(null)
   const [prefs, setPrefs, resetPrefs] = useStoredState(`titipin:${table}:tampilan:v1`, VIEW_DEFAULTS)
 
@@ -135,6 +140,7 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     })
     resetImage()
     setForm(f)
+    setInitialForm(JSON.stringify(f))
     setExistingPath('')
     setEditing('new')
   }
@@ -147,6 +153,7 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     })
     resetImage()
     setForm(f)
+    setInitialForm(JSON.stringify(f))
     setExistingPath(imageField ? String(row[imageField.key] ?? '') : '')
     setEditing(row)
   }
@@ -183,6 +190,10 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     const msg = validate()
     if (msg) {
       notify(msg, 'error')
+      return
+    }
+    if (dupRow) {
+      notify(`${cap(noun)} "${String(form[titleKey] ?? '').trim()}" sudah ada. Gunakan nama lain atau ubah data yang sudah ada.`, 'error')
       return
     }
     setBusy(true)
@@ -300,6 +311,54 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
       return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''))
     })
 
+  const paged = usePaged(shown, [q, status, pick, prefs.sort].join('|'), 24)
+  const pageIds = paged.slice.map((r) => r.id as number)
+  const pageAllPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id))
+  const pickedRows = rows.filter((r) => picked.has(r.id as number))
+  const togglePick = (id: number) =>
+    setPicked((cur) => {
+      const n = new Set(cur)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+
+  async function bulkActive(on: boolean) {
+    if (!activeField || pickedRows.length === 0) return
+    setBusy(true)
+    const { data, error } = await supabase.from(table).update({ [activeField.key]: on }).in('id', pickedRows.map((r) => r.id as number)).select('id')
+    setBusy(false)
+    if (error || !data || data.length === 0) {
+      notify(error ? errText(error) : 'Perubahan ditolak. Hanya admin yang boleh mengubah data.', 'error')
+      return
+    }
+    notify(`${data.length} ${noun} ${on ? 'diaktifkan' : 'dinonaktifkan'}.`)
+    setPicked(new Set())
+    await load()
+  }
+
+  async function bulkRemove() {
+    if (pickedRows.length === 0) return
+    const ok = await confirm({
+      title: `Hapus ${pickedRows.length} ${noun}?`,
+      message: `Yang sudah dipakai di data lain akan ditolak dan dilewati. Sebaiknya nonaktifkan saja jika masih dipakai.`,
+      confirmText: 'Ya, hapus',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusy(true)
+    let done = 0
+    for (const r of pickedRows) {
+      const { data, error } = await supabase.from(table).delete().eq('id', r.id as number).select('id')
+      if (!error && data && data.length > 0) done += 1
+    }
+    setBusy(false)
+    const failed = pickedRows.length - done
+    notify(failed > 0 ? `${done} ${noun} dihapus, ${failed} ditolak (masih dipakai atau tidak diizinkan).` : `${done} ${noun} dihapus.`, failed > 0 ? 'error' : 'success')
+    setPicked(new Set())
+    await load()
+  }
+
   const viewGroups: OptionGroup[] = [
     { type: 'seg', key: 'view', label: 'Tampilan', choices: [{ value: 'cards', label: 'Kartu' }, { value: 'list', label: 'Daftar' }] },
     {
@@ -387,6 +446,13 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
   }
 
   const noneYet = rows.length === 0
+  // peringatan dini: nama sudah dipakai data lain (tanpa membedakan huruf besar/kecil)
+  const typedName = String(form[titleKey] ?? '').trim().toLowerCase()
+  const dupRow =
+    editing !== null && typedName !== ''
+      ? rows.find((r) => String(r[titleKey] ?? '').trim().toLowerCase() === typedName && (editing === 'new' || r !== editing && r.id !== (editing as Row).id))
+      : undefined
+  const formDirty = editing !== null && (JSON.stringify(form) !== initialForm || newFile !== null)
   const imgCards = Boolean(imageField) && prefs.view === 'cards'
 
   return (
@@ -473,10 +539,15 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian atau filter." />
       ) : imgCards ? (
         <div className="catalog cp-grid" data-size={prefs.size}>
-          {shown.map((row) => {
+          {paged.slice.map((row) => {
             const img = imageField ? (row[imageField.key] as string | null) : null
             return (
-              <article key={row.id as number} className={`pcard cp-card${isOff(row) ? ' off' : ''}`}>
+              <article key={row.id as number} className={`pcard cp-card${isOff(row) ? ' off' : ''}${picked.has(row.id as number) ? ' is-picked' : ''}`}>
+                {isAdmin && (
+                  <label className="sel-box" title="Pilih">
+                    <input type="checkbox" checked={picked.has(row.id as number)} onChange={() => togglePick(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />
+                  </label>
+                )}
                 <div className="cp-media">
                   {img ? <img src={imageUrl(img)} alt="" loading="lazy" /> : <Package size={34} />}
                   {statChip(row)}
@@ -493,10 +564,15 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         </div>
       ) : (
         <div className={`cp-list${prefs.view === 'list' ? ' single' : ''}`}>
-          {shown.map((row) => {
+          {paged.slice.map((row) => {
             const img = imageField ? (row[imageField.key] as string | null) : null
             return (
-              <article key={row.id as number} className={`cp-item${isOff(row) ? ' off' : ''}`}>
+              <article key={row.id as number} className={`cp-item${isOff(row) ? ' off' : ''}${picked.has(row.id as number) ? ' is-picked' : ''}`}>
+                {isAdmin && (
+                  <label className="sel-box cp-sel" title="Pilih">
+                    <input type="checkbox" checked={picked.has(row.id as number)} onChange={() => togglePick(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />
+                  </label>
+                )}
                 {imageField ? (
                   img ? <img className="cp-thumb" src={imageUrl(img)} alt="" loading="lazy" /> : <span className="cp-thumb"><Package size={20} /></span>
                 ) : (
@@ -517,8 +593,31 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         </div>
       )}
 
+      {!loading && shown.length > 0 && <Pagination paged={paged} sizes={[12, 24, 48, 96]} />}
+
+      <BulkBar count={picked.size}>
+        <button type="button" className="btn-sm" onClick={() => setPicked((cur) => { const n = new Set(cur); pageIds.forEach((id) => (pageAllPicked ? n.delete(id) : n.add(id))); return n })}>
+          {pageAllPicked ? 'Batal pilih halaman ini' : `Pilih halaman ini (${pageIds.length})`}
+        </button>
+        {shown.length > pageIds.length && (
+          <button type="button" className="btn-sm" onClick={() => setPicked(new Set(shown.map((r) => r.id as number)))}>
+            Pilih semua hasil ({shown.length})
+          </button>
+        )}
+        {activeField && (
+          <>
+            <button type="button" className="btn-sm" disabled={busy} onClick={() => void bulkActive(true)}>Aktifkan</button>
+            <button type="button" className="btn-sm" disabled={busy} onClick={() => void bulkActive(false)}>Nonaktifkan</button>
+          </>
+        )}
+        <button type="button" className="btn-sm btn-icon btn-danger" disabled={busy} onClick={() => void bulkRemove()}>
+          <Trash2 size={15} /> Hapus
+        </button>
+        <button type="button" className="btn-sm btn-ghost" onClick={() => setPicked(new Set())}>Batal</button>
+      </BulkBar>
+
       {editing !== null && (
-        <Modal title={editing === 'new' ? `Tambah ${noun}` : `Ubah ${noun}`} onClose={() => !busy && closeForm()}>
+        <Modal title={editing === 'new' ? `Tambah ${noun}` : `Ubah ${noun}`} dirty={formDirty} onClose={() => !busy && closeForm()}>
           <form noValidate onSubmit={(e) => void save(e)} className="form-stack">
             <small>Tanda <span className="req">*</span> wajib diisi.</small>
             {fields.map((fl) => {
@@ -538,15 +637,16 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
               }
               if (fl.type === 'select') {
                 return (
-                  <label key={fl.key} className="field">
+                  <div key={fl.key} className="field">
                     {label}
-                    <select value={String(form[fl.key] ?? '')} onChange={(e) => setForm({ ...form, [fl.key]: e.target.value })}>
-                      <option value="">— pilih —</option>
-                      {fl.options?.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </label>
+                    <SelectSheet
+                      label={fl.label}
+                      emptyLabel="— pilih —"
+                      value={String(form[fl.key] ?? '')}
+                      onChange={(v) => setForm({ ...form, [fl.key]: v })}
+                      options={(fl.options ?? []).map((o) => ({ value: String(o.value), label: o.label }))}
+                    />
+                  </div>
                 )
               }
               if (fl.type === 'image') {
@@ -575,6 +675,11 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
                 <label key={fl.key} className="field">
                   {label}
                   <input placeholder={fl.placeholder} value={String(form[fl.key] ?? '')} onChange={(e) => setForm({ ...form, [fl.key]: e.target.value })} />
+                  {fl.key === titleKey && dupRow && (
+                    <span className="hint" style={{ color: 'var(--warning)' }}>
+                      {cap(noun)} dengan nama ini sudah ada{dupRow.is_active === false ? ' (nonaktif)' : ''}. Gunakan nama lain.
+                    </span>
+                  )}
                 </label>
               )
             })}
