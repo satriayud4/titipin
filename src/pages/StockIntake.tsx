@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import { Check, Grid2X2, List, PackagePlus, Plus, Search, Trash2 } from 'lucide-react'
+import { Check, Grid2X2, List, PackagePlus, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -83,6 +83,7 @@ export default function StockIntake() {
   const [cat, setCat] = useState('') // '' = semua, 'biasa' = biasa dititip, selain itu = id kategori
   const [sheet, setSheet] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [busy, setBusy] = useState(false)
   const [recent, setRecent] = useState<Map<number, { rank: number; products: number }>>(new Map())
   const [prefs, setPrefs, resetPrefs] = useStoredState('titipin:barangmasuk:tampilan:v1', VIEW_DEFAULTS)
@@ -378,6 +379,9 @@ export default function StockIntake() {
             <div className="cl-name">{p.name}</div>
             <div className="page-sub">{h ? `Terakhir: ${rupiah(h.cost)} / ${rupiah(h.sell)}` : 'Belum pernah dititip supplier ini'}</div>
           </div>
+          <button type="button" className="icon-btn" style={{ minHeight: 34, minWidth: 34 }} onClick={() => setEditProduct(p)} aria-label={`Ubah produk ${p.name}`}>
+            <Pencil size={15} />
+          </button>
           <button className="icon-btn" style={{ minHeight: 34, minWidth: 34 }} onClick={() => toggle(p)} aria-label={`Hapus ${p.name} dari daftar`}>
             <Trash2 size={16} />
           </button>
@@ -476,7 +480,12 @@ export default function StockIntake() {
               <div className={`bm-qrow${filled ? ' on' : ''}`} key={p.id} role="row">
                 {p.image_path ? <img className="bm-thumb" src={imageUrl(p.image_path)} alt="" loading="lazy" /> : <span className="bm-thumb" />}
                 <div className="bm-qname">
-                  <strong>{p.name}</strong>
+                  <strong>
+                    {p.name}
+                    <button type="button" className="bm-edit" onClick={() => setEditProduct(p)} aria-label={`Ubah produk ${p.name}`}>
+                      <Pencil size={13} />
+                    </button>
+                  </strong>
                   <small>{h ? `Terakhir ${rupiah(h.cost)} / ${rupiah(h.sell)}` : 'Belum pernah dititip supplier ini'}</small>
                 </div>
                 <label className="bm-f bm-f-qty">
@@ -599,8 +608,8 @@ export default function StockIntake() {
                   const sel = selectedIds.has(p.id)
                   const h = history.get(p.id)
                   return (
+                    <div className="tile-wrap" key={p.id}>
                     <button
-                      key={p.id}
                       type="button"
                       className={`tile${sel ? ' in-cart' : ''}`}
                       onClick={() => toggle(p)}
@@ -616,6 +625,10 @@ export default function StockIntake() {
                         {h && <span className="badge badge-info">Biasa dititip</span>}
                       </span>
                     </button>
+                    <button type="button" className="tile-edit" onClick={() => setEditProduct(p)} aria-label={`Ubah produk ${p.name}`}>
+                      <Pencil size={14} />
+                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -655,6 +668,19 @@ export default function StockIntake() {
             {busy ? 'Menyimpan…' : draftSids.length > 1 ? `Simpan semua (${draftSids.length} supplier)` : 'Simpan barang masuk'}
           </button>
         </div>
+      )}
+
+      {editProduct && (
+        <NewProductModal
+          product={editProduct}
+          supplierId={Number(supplierId) || editProduct.supplier_id || 0}
+          categories={categories}
+          onClose={() => setEditProduct(null)}
+          onSaved={async () => {
+            setEditProduct(null)
+            await loadLists()
+          }}
+        />
       )}
 
       {newOpen && supplierId && (

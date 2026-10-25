@@ -26,6 +26,7 @@ import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
 import { todayWIB } from '../lib/dates'
 import { LOW_STOCK } from '../lib/alerts'
+import { wibTime } from '../lib/promo'
 import './Promo.css'
 
 interface Item {
@@ -141,6 +142,20 @@ const VIEW_GROUPS: OptionGroup[] = [
   },
 ]
 
+// harga promo yang berlaku: fungsi baru dulu, tabel promo lama sebagai cadangan
+async function fetchPromoPrices() {
+  const r = await supabase.rpc('promo_active_prices')
+  if (!r.error) {
+    return ((r.data ?? []) as { batch_id: number; original_price: number; end_mode: string; end_at: string | null }[]).map((x) => ({
+      batch_id: x.batch_id,
+      original_price: x.original_price,
+      end_at: x.end_mode === 'at' ? x.end_at : null,
+    }))
+  }
+  const old = await supabase.from('promo_items').select('batch_id, original_price').eq('active', true)
+  return old.error ? [] : ((old.data ?? []) as { batch_id: number; original_price: number }[]).map((x) => ({ ...x, end_at: null as string | null }))
+}
+
 // Semua stok yang masih ada dan belum expired harus tampil di kasir.
 // Supabase membatasi 1000 baris per permintaan, jadi diambil per halaman sampai habis.
 async function fetchSellable(today: string) {
@@ -172,6 +187,8 @@ export default function Pos() {
   const [accounts, setAccounts] = useState<PayAccount[]>([])
   // stok yang sedang promo: id stok -> harga normal sebelum diskon
   const [promos, setPromos] = useState<Map<number, number>>(new Map())
+  // promo berjam: id stok -> waktu promo berakhir (kosong bila sampai expired)
+  const [promoEnds, setPromoEnds] = useState<Map<number, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [cart, setCart] = useState<Record<number, number>>({})
   const [search, setSearch] = useState('')
@@ -184,6 +201,7 @@ export default function Pos() {
 
   const load = useCallback(async () => {
     const today = todayWIB()
+    await supabase.rpc('promo_sync') // nyalakan/matikan promo berjam sebelum harga dibaca
     const [b, p, s, c, a, pr] = await Promise.all([
       fetchSellable(today),
       supabase.from('products').select('id, name, image_path, category_id'),
@@ -194,7 +212,7 @@ export default function Pos() {
         .select('id, type, name, account_number, account_holder, image_path')
         .eq('is_active', true)
         .order('id'),
-      supabase.from('promo_items').select('batch_id, original_price').eq('active', true),
+      fetchPromoPrices(),
     ])
     if (b.error) {
       notify(errText(b.error), 'error')
@@ -213,13 +231,24 @@ export default function Pos() {
     setSuppliers(new Map((s.data ?? []).map((x) => [x.id as number, x.name as string])))
     setCategories((c.data ?? []) as { id: number; name: string }[])
     setAccounts((a.data ?? []) as PayAccount[])
-    // tabel promo belum dibuat -> abaikan saja, kasir tetap jalan
-    setPromos(new Map((pr.error ? [] : pr.data ?? []).map((x) => [x.batch_id as number, x.original_price as number])))
+    setPromos(new Map(pr.map((x) => [x.batch_id, x.original_price])))
+    setPromoEnds(new Map(pr.filter((x) => x.end_at).map((x) => [x.batch_id, x.end_at as string])))
     setLoading(false)
   }, [notify])
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  // promo berjam mulai/berhenti sendiri: cek tiap 30 detik, muat ulang harga hanya bila ada yang berubah
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void supabase.rpc('promo_sync').then(({ data }) => {
+        if (Number(data) > 0) void load()
+      })
+    }, 30000)
+    return () => window.clearInterval(id)
   }, [load])
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.batch_id, i])), [items])
@@ -303,6 +332,14 @@ export default function Pos() {
       return
     }
     setBusy(true)
+    // pastikan harga promo sudah yang terbaru; bila baru saja berubah, kasir diminta memeriksa ulang
+    const sync = await supabase.rpc('promo_sync')
+    if (Number(sync.data) > 0) {
+      setBusy(false)
+      await load()
+      notify('Harga promo baru saja berubah. Periksa keranjang lalu coba bayar lagi.', 'error')
+      return
+    }
     const { data, error } = await supabase.rpc('create_sale', {
       p_method: method,
       p_cash_received: method === 'tunai' ? received : null,
@@ -480,7 +517,12 @@ export default function Pos() {
                   aria-label={`Tambah ${p?.name ?? 'produk'}`}
                 >
                   {p?.image_path ? <img className="tile-img" src={imageUrl(p.image_path)} alt="" loading="lazy" /> : <span className="tile-img" />}
-                  {off > 0 && <span className="tile-promo">Promo -{off}%</span>}
+                  {off > 0 && (
+                    <span className="tile-promo">
+                      Promo -{off}%
+                      {promoEnds.get(it.batch_id) && <small>s/d {wibTime(promoEnds.get(it.batch_id)!)}</small>}
+                    </span>
+                  )}
                   <span className="tile-price">{off > 0 && <s>{rupiah(was)}</s>}{rupiah(it.sell_price)}</span>
                   {inCart > 0 && <span className="tile-qty">{inCart}</span>}
                   <span className="tile-body">
