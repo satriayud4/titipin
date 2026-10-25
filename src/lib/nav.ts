@@ -46,7 +46,7 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
       { to: '/barang-masuk', label: 'Barang Masuk', icon: PackagePlus },
       { to: '/stok', label: 'Stok', icon: Boxes },
       { to: '/retur', label: 'Retur', icon: Undo2 },
-      { to: '/promo', label: 'Promo Expired', icon: BadgePercent },
+      { to: '/promo', label: 'Promo', icon: BadgePercent },
     ],
   },
   {

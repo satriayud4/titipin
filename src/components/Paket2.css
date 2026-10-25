@@ -1,0 +1,95 @@
+/* ===== Pagination ===== */
+.pg { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin: 18px 0 4px; }
+.pg-info { color: var(--muted); font-size: 0.88rem; }
+.pg-nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pg-btn {
+  min-width: 38px; min-height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text);
+  font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.pg-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.pg-btn[aria-current='page'] { background: var(--primary); border-color: var(--primary); color: #fff; }
+.pg-btn:disabled { opacity: 0.45; cursor: default; }
+.pg-gap { color: var(--muted); padding: 0 4px; }
+.pg-size { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.88rem; }
+.pg-size select { min-height: 38px; width: auto; }
+@media (max-width: 560px) { .pg-nav .pg-num { display: none; } .pg-nav .pg-cur { display: inline-flex; } }
+.pg-cur { display: none; align-items: center; padding: 0 8px; color: var(--muted); font-size: 0.9rem; }
+
+/* ===== Pilih (checkbox) dan bar aksi massal ===== */
+.sel-box {
+  position: absolute; top: 8px; left: 8px; z-index: 3; width: 30px; height: 30px; margin: 0;
+  display: grid; place-items: center; border-radius: 8px; cursor: pointer;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); border: 1px solid var(--border);
+}
+.sel-box input { width: 18px; height: 18px; margin: 0; cursor: pointer; accent-color: var(--primary); }
+.is-picked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.bulk-bar {
+  position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 30; margin: 14px 0 0;
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-md);
+}
+.bulk-bar b { margin-right: auto; }
+.bulk-bar .btn-sm { min-height: 38px; }
+
+/* ===== Pilihan berbentuk bottom sheet (HP) ===== */
+.ss-btn {
+  width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 0 12px; text-align: left; font-weight: 500;
+}
+.ss-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-btn.placeholder span { color: var(--muted); }
+.ss-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 6px; }
+.ss-head h2 { margin: 0; font-size: 1.05rem; }
+.ss-search { margin: 6px 16px 8px; }
+.ss-list { display: grid; max-height: 55vh; overflow: auto; padding: 4px 8px 12px; }
+.ss-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 8px 12px;
+  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; font-weight: 500; cursor: pointer;
+}
+.ss-opt:hover, .ss-opt:focus-visible { background: var(--surface-2); }
+.ss-opt[aria-selected='true'] { color: var(--primary); font-weight: 700; }
+.ss-opt small { color: var(--muted); font-weight: 400; }
+
+/* ===== Drawer detail ===== */
+.drawer-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 20, 0.45); display: flex; justify-content: flex-end; }
+.drawer {
+  width: min(460px, 100%); height: 100%; background: var(--surface); display: flex; flex-direction: column;
+  box-shadow: var(--shadow-lg, 0 10px 40px rgba(0, 0, 0, 0.25)); animation: drawerIn 0.22s var(--ease, ease-out) both;
+}
+@keyframes drawerIn { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border-soft); }
+.drawer-head h2 { margin: 0; font-size: 1.05rem; }
+.drawer-body { flex: 1; overflow: auto; padding: 16px; display: grid; gap: 16px; align-content: start; }
+.drawer-foot { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border-soft); }
+@media (max-width: 720px) {
+  .drawer-scrim { align-items: flex-end; }
+  .drawer { width: 100%; height: auto; max-height: 90vh; border-radius: var(--r-lg) var(--r-lg) 0 0; animation-name: sheetUp; }
+}
+.dr-top { display: flex; align-items: center; gap: 12px; }
+.dr-top img, .dr-noimg { flex: none; width: 72px; height: 72px; border-radius: 14px; object-fit: cover; background: var(--border-soft); }
+.dr-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; text-align: center; }
+.dr-stats div { padding: 8px 2px; border-radius: var(--r-sm); background: var(--surface-2); display: grid; gap: 2px; }
+.dr-stats b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.dr-stats span { font-size: 0.7rem; color: var(--muted); }
+.dr-list { display: grid; margin: 0; }
+.dr-list > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.92rem; }
+.dr-list dt { color: var(--muted); }
+.dr-list dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.dr-sec h3 { margin: 0 0 6px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.dr-hist { display: grid; gap: 8px; }
+.dr-hist-item { padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); font-size: 0.88rem; display: grid; gap: 2px; }
+.dr-hist-item small { color: var(--muted); }
+
+/* ===== Halaman Stok ===== */
+.st-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 14px; }
+.st-filters select, .st-filters .ss-btn { width: auto; min-width: 150px; min-height: 40px; }
+@media (max-width: 720px) { .st-filters > * { flex: 1 1 calc(50% - 8px); } .st-filters .ss-btn { width: 100%; } }
+.stock-card { position: relative; }
+.stock-top.st-link { cursor: pointer; border-radius: 10px; }
+.stock-top.st-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.stock-card .stock-top { padding-left: 0; }
+
+/* ===== CrudPage: pilihan massal ===== */
+.cp-card, .cp-item, .pcard { position: relative; }
+.cp-item .sel-box { top: 6px; left: 6px; width: 26px; height: 26px; }
