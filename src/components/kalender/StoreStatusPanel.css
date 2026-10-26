@@ -1,0 +1,15 @@
+.sst { display: grid; gap: 14px; margin-bottom: 16px; padding: 18px; border-radius: 20px; animation: pmUp 0.45s var(--ease) both; }
+.sst-head { display: flex; gap: 12px; align-items: flex-start; }
+.sst-head svg { flex: none; margin-top: 3px; color: var(--primary); }
+.sst-head h2 { margin: 0; font-size: 1.02rem; }
+.sst-head p { margin: 2px 0 0; color: var(--muted); font-size: 0.86rem; }
+.sst-form { display: grid; gap: 10px; }
+.sst-quick { display: flex; gap: 8px; flex-wrap: wrap; }
+.sst-fields { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) { .sst-fields { grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) auto; align-items: center; } }
+.sst-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sst-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.sst-list li.past { opacity: 0.7; }
+.sst-day { font-weight: 700; }
+.sst-note { grid-column: 1; color: var(--muted); font-size: 0.86rem; overflow-wrap: anywhere; }
+.sst-list li .btn-sm { grid-row: 1 / span 2; grid-column: 2; }

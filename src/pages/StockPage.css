@@ -1,0 +1,12 @@
+/* Filter, pilih banyak, dan detail di halaman Stok */
+.stk-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; align-items: center; margin-bottom: 12px; }
+.stk-filters .dp-trigger { min-height: 42px; font-size: 0.9rem; }
+.stk-reset { justify-self: start; min-height: 38px; padding: 6px 12px; border-color: transparent; background: transparent; color: var(--primary); font-weight: 700; }
+.stk-selectall { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 10px 2px; font-weight: 600; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
+.stock-card { position: relative; transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s var(--ease); }
+.stock-card.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.stk-check { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.stk-link { display: block; padding: 0; min-height: 0; border: 0; background: transparent; text-align: left; font-weight: 800; color: inherit; overflow-wrap: anywhere; }
+.stk-link:hover:not(:disabled) { background: transparent; color: var(--primary); text-decoration: underline; }
+.stock-top { padding-right: 28px; }
+@media (max-width: 520px) { .stk-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

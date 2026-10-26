@@ -2,19 +2,27 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { lockScroll } from '../lib/scrollLock'
-import './Paket2.css'
+import './ui.css'
 
-/** Panel samping (komputer) atau bottom sheet (HP) untuk melihat detail tanpa pindah halaman. */
-export default function Drawer({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+interface Props {
+  title: string
+  subtitle?: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+}
+
+/** Panel detail: muncul dari kanan di desktop, dari bawah (bottom sheet) di HP. Halaman di belakangnya tetap utuh. */
+export default function Drawer({ title, subtitle, onClose, children, footer }: Props) {
   const closeRef = useRef(onClose)
   useEffect(() => {
     closeRef.current = onClose
   })
-
   useEffect(() => {
     const unlock = lockScroll()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current()
+      // jangan ikut menutup bila ada dialog konfirmasi di atasnya
+      if (e.key === 'Escape' && !document.querySelector('.dialog-scrim')) closeRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => {
@@ -24,18 +32,32 @@ export default function Drawer({ title, onClose, children, footer }: { title: st
   }, [])
 
   return createPortal(
-    <div className="drawer-scrim" onPointerDown={(e) => e.target === e.currentTarget && closeRef.current()}>
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="drawer-head">
-          <h2>{title}</h2>
+    <div className="dr-scrim" onPointerDown={(e) => e.target === e.currentTarget && closeRef.current()}>
+      <aside className="dr" role="dialog" aria-modal="true" aria-label={title}>
+        <span className="dr-grab" aria-hidden="true" />
+        <header className="dr-head">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Tutup">
             <X size={20} />
           </button>
-        </div>
-        <div className="drawer-body">{children}</div>
-        {footer && <div className="drawer-foot">{footer}</div>}
+        </header>
+        <div className="dr-body">{children}</div>
+        {footer && <footer className="dr-foot">{footer}</footer>}
       </aside>
     </div>,
     document.body,
+  )
+}
+
+/** Baris "label: nilai" untuk isi drawer. */
+export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="dr-row">
+      <span>{label}</span>
+      <b>{children}</b>
+    </div>
   )
 }

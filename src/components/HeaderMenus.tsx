@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useConfirm } from './ConfirmDialog'
 import { Bell, ChevronDown, CircleAlert, Info, LogOut, TriangleAlert, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import type { AlertItem } from '../lib/alerts'
 import ThemeToggle from './ThemeToggle'
-import { useConfirm } from './ConfirmDialog'
 
 function usePopover() {
   const [open, setOpen] = useState(false)
@@ -73,10 +73,6 @@ export function NotificationsMenu({ alerts }: { alerts: AlertItem[] }) {
 export function UserMenu() {
   const { profile, signOut } = useAuth()
   const confirm = useConfirm()
-  async function askLogout() {
-    const ok = await confirm({ title: 'Keluar dari akun?', message: 'Anda perlu masuk lagi untuk memakai aplikasi. Keranjang yang belum dibayar akan hilang.', confirmText: 'Ya, keluar' })
-    if (ok) await signOut()
-  }
   const { open, setOpen, ref } = usePopover()
   const navigate = useNavigate()
 
@@ -129,7 +125,14 @@ export function UserMenu() {
           <button
             type="button"
             className="btn-ghost"
-            onClick={() => void askLogout()}
+            onClick={() =>
+              void confirm({
+                title: 'Keluar dari akun?',
+                message: 'Kamu perlu masuk lagi untuk memakai aplikasi. Keranjang kasir dan draft barang masuk yang belum selesai tetap tersimpan di perangkat ini.',
+                confirmText: 'Ya, keluar',
+                tone: 'danger',
+              }).then((ok) => ok && void signOut())
+            }
           >
             <LogOut size={16} />
             Keluar

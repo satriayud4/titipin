@@ -29,6 +29,7 @@ import BuatPaket from './pages/BuatPaket'
 import PembelianPaket from './pages/PembelianPaket'
 import Kalender from './pages/Kalender'
 import Promo from './pages/Promo'
+import Audit from './pages/Audit'
 
 export default function App() {
   return (
@@ -78,6 +79,14 @@ export default function App() {
                     element={
                       <ProtectedRoute roles={['admin']}>
                         <PaymentSettings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/audit"
+                    element={
+                      <ProtectedRoute roles={['admin']}>
+                        <Audit />
                       </ProtectedRoute>
                     }
                   />

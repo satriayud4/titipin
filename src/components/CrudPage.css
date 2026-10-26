@@ -70,3 +70,11 @@
 .cp-switch:hover:not(:disabled) { background: color-mix(in srgb, var(--muted) 35%, var(--border)); }
 .cp-switch[aria-checked='true'], .cp-switch[aria-checked='true']:hover:not(:disabled) { background: var(--primary); }
 .cp-switch[aria-checked='true']::after { transform: translateX(18px); }
+
+/* pilih banyak + detail */
+.cp-card, .cp-item { position: relative; transition: box-shadow 0.2s, border-color 0.2s; }
+.cp-card.selected, .cp-item.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.cp-check { position: absolute; top: 10px; right: 10px; z-index: 3; }
+.cp-link { display: block; padding: 0; min-height: 0; border: 0; background: transparent; text-align: left; color: inherit; overflow-wrap: anywhere; }
+.cp-link:hover:not(:disabled) { background: transparent; color: var(--primary); }
+.cp-item .rowcheck { margin-right: 4px; }

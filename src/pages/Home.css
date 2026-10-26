@@ -1,0 +1,33 @@
+/* Dashboard yang bisa diklik */
+a.kpi-link { display: block; color: inherit; text-decoration: none; position: relative; cursor: pointer; transition: transform 0.2s var(--ease), box-shadow 0.25s, border-color 0.2s, opacity 0.2s; }
+a.kpi-link:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); box-shadow: 0 18px 36px -22px rgba(16, 24, 40, 0.55); }
+a.kpi-link:active { transform: translateY(-1px) scale(0.99); }
+a.kpi-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.kpi-top { position: relative; }
+.kpi-go { margin-left: auto; color: var(--muted); opacity: 0; transform: translateX(-4px); transition: opacity 0.2s, transform 0.25s var(--ease); }
+a.kpi-link:hover .kpi-go, a.kpi-link:focus-visible .kpi-go { opacity: 1; transform: none; }
+@media (hover: none) { .kpi-go { opacity: 0.6; transform: none; } }
+.kpi-closed { opacity: 0.72; }
+.kpi-closed .kpi-value { color: var(--muted); }
+.kpi-closed .kpi-deco { opacity: 0.35; }
+
+a.chip-link { text-decoration: none; color: inherit; transition: border-color 0.2s, background-color 0.2s; }
+a.chip-link:hover { border-color: var(--primary); background: var(--primary-soft); }
+
+.closed-banner {
+  display: flex; align-items: center; gap: 14px; margin: 0 0 18px; padding: 14px 16px; border-radius: 18px; text-decoration: none; color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  animation: pmUp 0.4s var(--ease) both; transition: transform 0.2s var(--ease), box-shadow 0.25s;
+}
+.closed-banner:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -22px var(--primary); }
+.closed-banner > svg:first-child { flex: none; color: var(--primary); }
+.closed-banner > span { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.closed-banner small { color: var(--muted); overflow-wrap: anywhere; }
+.closed-banner.warn { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: var(--warning-soft); }
+.closed-banner.warn > svg:first-child { color: var(--warning); }
+
+a.rank-link, button.list-click, a.list-click { color: inherit; text-decoration: none; text-align: left; width: 100%; background: transparent; border-color: transparent; cursor: pointer; border-radius: 14px; transition: background-color 0.18s, transform 0.15s var(--ease); }
+a.rank-link:hover, button.list-click:hover:not(:disabled), a.list-click:hover { background: var(--surface-2); border-color: transparent; }
+a.rank-link:active, button.list-click:active, a.list-click:active { transform: scale(0.99); }
+a.rank-link:focus-visible, button.list-click:focus-visible, a.list-click:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+button.list-click { font-weight: 400; min-height: 0; display: flex; }

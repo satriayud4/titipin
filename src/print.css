@@ -1,0 +1,24 @@
+/* ===== Cetak: laporan dan bukti transaksi ===== */
+.print-only { display: none; }
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .sidebar, .header, .tabbar, .scrim, .toast-stack, .no-print, .pg, .bulk, .draft-banner, .search-btn { display: none !important; }
+  .app, .content, .main, .page { display: block !important; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; height: auto !important; overflow: visible !important; position: static !important; }
+  .print-only { display: block !important; }
+  * { animation: none !important; transition: none !important; box-shadow: none !important; backdrop-filter: none !important; }
+  .panel, .card, .st-card, .pm-card { border: 1px solid #bbb !important; background: #fff !important; break-inside: avoid; }
+  table { width: 100% !important; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  tr, img { break-inside: avoid; }
+  th, td { border-bottom: 1px solid #ddd !important; color: #000 !important; }
+  a { color: inherit !important; text-decoration: none !important; }
+  .table-wrap { overflow: visible !important; }
+
+  /* bukti transaksi: hanya jendela yang terbuka, selebar struk */
+  html[data-print='receipt'] body > *:not(.dialog-scrim) { display: none !important; }
+  html[data-print='receipt'] .dialog-scrim { position: static !important; display: block !important; background: none !important; padding: 0 !important; }
+  html[data-print='receipt'] .dialog { max-width: 80mm !important; width: 80mm !important; max-height: none !important; margin: 0 auto !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; overflow: visible !important; transform: none !important; }
+  html[data-print='receipt'] .dialog-body { overflow: visible !important; max-height: none !important; padding: 0 !important; font-size: 11pt; }
+  html[data-print='receipt'] .dialog-foot, html[data-print='receipt'] .dialog-head .icon-btn { display: none !important; }
+}

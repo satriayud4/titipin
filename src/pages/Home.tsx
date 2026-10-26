@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Boxes,
   CalendarDays,
+  CalendarOff,
   ChevronRight,
   CircleAlert,
   HandCoins,
@@ -26,6 +27,9 @@ import { addDays, todayWIB } from '../lib/dates'
 import { imageUrl } from '../lib/image'
 import { fetchReport, profit, type DayRow, type ProductRow } from '../lib/report'
 import { LOW_STOCK, type AlertItem } from '../lib/alerts'
+import { fetchDayStatus, type DayStatus } from '../lib/storeStatus'
+import SaleDetailModal from '../components/SaleDetailModal'
+import './Home.css'
 
 type Tone = 'green' | 'purple' | 'orange' | 'blue' | 'red'
 type Method = 'tunai' | 'transfer' | 'qris'
@@ -70,17 +74,37 @@ function Delta({ now, prev }: { now: number; prev: number }) {
   )
 }
 
-function Kpi({ tone, icon: Icon, label, value, loading, children }: { tone: Tone; icon: LucideIcon; label: string; value: string; loading: boolean; children: ReactNode }) {
+function Kpi({
+  tone,
+  icon: Icon,
+  label,
+  value,
+  loading,
+  to,
+  closed,
+  children,
+}: {
+  tone: Tone
+  icon: LucideIcon
+  label: string
+  value: string
+  loading: boolean
+  to: string
+  /** Toko tutup hari ini: kartu diredam dan tidak menampilkan perbandingan. */
+  closed?: boolean
+  children: ReactNode
+}) {
   return (
-    <div className="kpi">
+    <Link to={to} className={`kpi kpi-link${closed ? ' kpi-closed' : ''}`} aria-label={`${label}: ${closed ? 'toko tutup' : value}. Buka rinciannya`}>
       <div className="kpi-top">
         <span className={`kpi-ico tone-${tone}`}><Icon size={19} /></span>
         <span>{label}</span>
+        <ChevronRight size={16} className="kpi-go" />
       </div>
-      <div className="kpi-value">{loading ? <div className="skeleton" style={{ height: 26, width: '70%' }} /> : value}</div>
-      <div className="kpi-sub">{loading ? <div className="skeleton" style={{ height: 12, width: '50%' }} /> : children}</div>
+      <div className="kpi-value">{loading ? <div className="skeleton" style={{ height: 26, width: '70%' }} /> : closed ? 'Tutup' : value}</div>
+      <div className="kpi-sub">{loading ? <div className="skeleton" style={{ height: 12, width: '50%' }} /> : closed ? <span>Toko tutup hari ini</span> : children}</div>
       <Icon className={`kpi-deco deco-${tone}`} size={72} />
-    </div>
+    </Link>
   )
 }
 
@@ -106,19 +130,25 @@ export default function Home() {
   const [lowCount, setLowCount] = useState(0)
   const [settle, setSettle] = useState<SettleRow[]>([])
   const [recent, setRecent] = useState<RecentSale[]>([])
+  const [dayStatus, setDayStatus] = useState<DayStatus | null>(null)
+  const [openSale, setOpenSale] = useState<number | null>(null)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       const t = todayWIB()
+      void supabase.rpc('auto_close_stale_shifts') // shift kasir yang lupa ditutup kemarin ditutup otomatis (diabaikan bila SQL belum dipasang)
       try {
-        const [rep, stock, settleRes, recentRes, prod] = await Promise.all([
+        const [rep, stock, settleRes, recentRes, prod, status] = await Promise.all([
           fetchReport(addDays(t, -6), t),
-          supabase.from('batch_stock').select('product_id, qty_remaining').gt('qty_remaining', 0).lte('received_date', t).gte('sellable_until', t),
+          supabase.from('batch_stock').select('product_id, qty_remaining').gt('qty_remaining', 0).gte('sellable_until', t),
           supabase.rpc('supplier_settlement_report', { p_date: t }),
           supabase.rpc('recent_sales', { p_limit: 5 }),
           supabase.from('products').select('name, image_path'),
+          fetchDayStatus(t),
         ])
+        if (!cancelled) setDayStatus(status)
         if (stock.error) throw stock.error
         if (settleRes.error) throw settleRes.error
         if (recentRes.error) throw recentRes.error
@@ -151,7 +181,7 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [notify])
+  }, [notify, tick])
 
   const today = daily.length > 0 ? daily[daily.length - 1] : null
   const yesterday = daily.length > 1 ? daily[daily.length - 2] : null
@@ -164,6 +194,9 @@ export default function Home() {
   const maxQty = Math.max(1, ...top.map((p) => p.qty))
   const hasSales = daily.some((d) => d.omzet > 0)
   const better = !!today && !!yesterday && today.omzet > yesterday.omzet
+  const trxToday = today?.transactions ?? 0
+  const closedToday = !!dayStatus?.closed
+  const closedQuiet = closedToday && trxToday === 0 // tutup dan memang tidak ada transaksi
   const settleRows = [...settle].sort((a, b) => b.total_payable - b.total_paid - (a.total_payable - a.total_paid)).slice(0, 4)
 
   return (
@@ -172,26 +205,41 @@ export default function Home() {
         <div>
           <h1>Dashboard</h1>
           <p className="page-sub" style={{ margin: 0 }}>
-            Selamat datang kembali{first ? `, ${first}` : ''}. Berikut ringkasan aktivitas toko hari ini.
+            Selamat datang kembali{first ? `, ${first}` : ''}.{' '}
+            {closedQuiet ? 'Toko tutup hari ini, jadi angka penjualan hari ini tidak dihitung.' : 'Berikut ringkasan aktivitas toko hari ini.'}
           </p>
         </div>
-        <span className="chip"><CalendarDays size={16} /> {dateLabel}</span>
+        <Link to="/kalender" className="chip chip-link" aria-label="Buka kalender"><CalendarDays size={16} /> {dateLabel}</Link>
       </div>
 
+      {closedToday && (
+        <Link to="/kalender" className={`closed-banner${closedQuiet ? '' : ' warn'}`}>
+          {closedQuiet ? <CalendarOff size={20} /> : <TriangleAlert size={20} />}
+          <span>
+            <strong>{closedQuiet ? 'Toko tutup hari ini' : `Toko ditandai tutup, tetapi ada ${trxToday} transaksi hari ini`}</strong>
+            <small>
+              {dayStatus?.note ? `${dayStatus.note}. ` : dayStatus?.source === 'weekly' ? 'Mengikuti jadwal mingguan. ' : ''}
+              Atur jadwal buka/tutup di Kalender.
+            </small>
+          </span>
+          <ChevronRight size={18} />
+        </Link>
+      )}
+
       <div className="kpi-grid">
-        <Kpi tone="green" icon={Wallet} label="Penjualan Hari Ini" value={rupiah(today?.omzet ?? 0)} loading={loading}>
+        <Kpi tone="green" icon={Wallet} label="Penjualan Hari Ini" value={rupiah(today?.omzet ?? 0)} loading={loading} to="/riwayat" closed={closedQuiet}>
           <Delta now={today?.omzet ?? 0} prev={yesterday?.omzet ?? 0} />
         </Kpi>
-        <Kpi tone="purple" icon={ShoppingBag} label="Jumlah Transaksi" value={String(today?.transactions ?? 0)} loading={loading}>
+        <Kpi tone="purple" icon={ShoppingBag} label="Jumlah Transaksi" value={String(today?.transactions ?? 0)} loading={loading} to="/riwayat" closed={closedQuiet}>
           <Delta now={today?.transactions ?? 0} prev={yesterday?.transactions ?? 0} />
         </Kpi>
-        <Kpi tone="orange" icon={TrendingUp} label="Laba (estimasi)" value={rupiah(today ? profit(today) : 0)} loading={loading}>
+        <Kpi tone="orange" icon={TrendingUp} label="Laba (estimasi)" value={rupiah(today ? profit(today) : 0)} loading={loading} to="/laporan" closed={closedQuiet}>
           <Delta now={today ? profit(today) : 0} prev={yesterday ? profit(yesterday) : 0} />
         </Kpi>
-        <Kpi tone="blue" icon={Boxes} label="Stok Siap Dijual" value={`${stockTypes} jenis`} loading={loading}>
+        <Kpi tone="blue" icon={Boxes} label="Stok Siap Dijual" value={`${stockTypes} jenis`} loading={loading} to={lowCount > 0 ? '/stok?filter=menipis' : '/stok'}>
           <span>{stockTypes === 0 ? 'Belum ada stok hari ini' : lowCount > 0 ? `${lowCount} produk menipis` : 'Semua stok aman'}</span>
         </Kpi>
-        <Kpi tone="red" icon={HandCoins} label="Setoran Belum Dibayar" value={rupiah(unpaid)} loading={loading}>
+        <Kpi tone="red" icon={HandCoins} label="Setoran Belum Dibayar" value={rupiah(unpaid)} loading={loading} to="/setoran">
           <span>{totalPayable === 0 ? 'Belum ada tagihan hari ini' : unpaid === 0 ? 'Semua sudah lunas' : `${unpaidCount} supplier`}</span>
         </Kpi>
       </div>
@@ -207,6 +255,7 @@ export default function Home() {
               <span><i style={{ background: 'var(--primary)' }} />Penjualan (Rp)</span>
               <span><i style={{ background: 'var(--purple)' }} />Jumlah transaksi</span>
             </div>
+            <Link className="link-more" to="/laporan">Laporan <ChevronRight size={14} /></Link>
           </div>
           {loading ? (
             <div className="skeleton" style={{ height: 260 }} />
@@ -233,7 +282,7 @@ export default function Home() {
             top.map((p, i) => {
               const img = images.get(p.name)
               return (
-                <div className="rank" key={p.name}>
+                <Link className="rank rank-link" key={p.name} to={`/stok?q=${encodeURIComponent(p.name)}`} aria-label={`Lihat stok ${p.name}`}>
                   <span className="rank-no">{i + 1}</span>
                   {img ? <img className="rank-img" src={imageUrl(img)} alt="" loading="lazy" /> : <div className="rank-img" />}
                   <div className="rank-body">
@@ -241,7 +290,7 @@ export default function Home() {
                     <div className="panel-sub">{p.qty} pcs</div>
                     <div className="bar"><i style={{ width: `${(p.qty / maxQty) * 100}%` }} /></div>
                   </div>
-                </div>
+                </Link>
               )
             })
           )}
@@ -250,9 +299,13 @@ export default function Home() {
         <div className="side" style={{ gridArea: 'side' }}>
           <section className="panel hero">
             <ShopScene />
-            <h3>Semangat hari ini!</h3>
+            <h3>{closedQuiet ? 'Selamat beristirahat!' : 'Semangat hari ini!'}</h3>
             <div className="panel-sub">
-              {better ? 'Penjualan hari ini lebih tinggi dari kemarin. Pertahankan!' : 'Setiap kue yang terjual adalah langkah kecil menuju mimpi besar.'}
+              {closedQuiet
+                ? 'Toko tutup hari ini. Pakai waktunya untuk istirahat dan menyiapkan stok berikutnya.'
+                : better
+                  ? 'Penjualan hari ini lebih tinggi dari kemarin. Pertahankan!'
+                  : 'Setiap kue yang terjual adalah langkah kecil menuju mimpi besar.'}
             </div>
           </section>
 
@@ -289,7 +342,7 @@ export default function Home() {
             <div className="empty">Belum ada transaksi.</div>
           ) : (
             recent.map((r) => (
-              <div className="list-row" key={r.id}>
+              <button type="button" className="list-row list-click" key={r.id} onClick={() => setOpenSale(r.id)} aria-label={`Lihat rincian TRX-${String(r.id).padStart(3, '0')}`}>
                 <div className="list-main">
                   <div className="list-title">TRX-{String(r.id).padStart(3, '0')}</div>
                   <div className="panel-sub">{saleTime(r.created_at)} · {r.cashier_name || '-'}</div>
@@ -299,7 +352,7 @@ export default function Home() {
                   <strong>{rupiah(r.total)}</strong>
                   <span className={`badge ${METHOD[r.payment_method].cls}`}>{METHOD[r.payment_method].label}</span>
                 </div>
-              </div>
+              </button>
             ))
           )}
         </section>
@@ -318,7 +371,7 @@ export default function Home() {
             <div className="empty">Belum ada tagihan hari ini.</div>
           ) : (
             settleRows.map((r) => (
-              <div className="list-row" key={r.supplier_id}>
+              <Link className="list-row list-click" key={r.supplier_id} to="/setoran" aria-label={`Buka setoran ${r.supplier_name}`}>
                 <div className="list-main">
                   <div className="list-title">{r.supplier_name}</div>
                   <div className="panel-sub">{r.sold_qty} barang terjual</div>
@@ -327,11 +380,13 @@ export default function Home() {
                   <strong>{rupiah(Math.max(r.total_payable - r.total_paid, 0))}</strong>
                   {settleBadge(r)}
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </section>
       </div>
+
+      {openSale !== null && <SaleDetailModal saleId={openSale} onClose={() => setOpenSale(null)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
   )
 }

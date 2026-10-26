@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Download, PackagePlus, PackageX, Pencil, Search, Trash2, TriangleAlert, Undo2, X } from 'lucide-react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { BadgePercent, CalendarClock, Eye, Info, PackagePlus, PackageX, Pencil, Search, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -9,18 +9,18 @@ import RusakPanel from '../components/RusakPanel'
 import DatePicker, { formatDateLong } from '../components/DatePicker'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
-import Pagination, { usePaged } from '../components/Pagination'
-import BulkBar from '../components/BulkBar'
-import SelectSheet from '../components/SelectSheet'
-import Drawer from '../components/Drawer'
-import { csvBlob, downloadBlob } from '../lib/export'
 import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
 import { addDays, shortDay, todayWIB } from '../lib/dates'
-import { MAX_QTY, MAX_RUPIAH } from '../lib/limits'
 import { imageUrl } from '../lib/image'
 import { LOW_STOCK } from '../lib/alerts'
 import './StockEdit.css'
+import './StockPage.css'
+import SelectSheet from '../components/SelectSheet'
+import Pagination from '../components/Pagination'
+import Drawer, { DetailRow } from '../components/Drawer'
+import BulkBar from '../components/BulkBar'
+import { usePagination } from '../lib/usePagination'
 
 interface Batch {
   batch_id: number
@@ -46,33 +46,24 @@ interface EditState {
   expired: string
 }
 type Filter = 'semua' | 'jual' | 'menipis' | 'retur'
-interface EditLog {
-  id?: number
-  batch_id: number
-  action: string
-  old_values: Record<string, unknown> | null
-  new_values: Record<string, unknown> | null
-  edited_by: string | null
-  [k: string]: unknown
+
+interface EditRow {
+  action?: string
+  old_values?: Record<string, unknown> | null
+  new_values?: Record<string, unknown> | null
+  created_at?: string
+  edited_at?: string
+  at?: string
 }
-const LOG_LABEL: Record<string, string> = {
-  supplier_id: 'Supplier',
-  qty_in: 'Stok masuk',
+const stamp = (r: EditRow) => String(r.created_at ?? r.edited_at ?? r.at ?? '')
+const FIELD_LABEL: Record<string, string> = {
+  qty_in: 'Jumlah masuk',
   cost_price: 'Harga supplier',
   sell_price: 'Harga jual',
   expired_date: 'Expired',
+  supplier_id: 'Supplier',
 }
-const EXP_FILTERS = [
-  { value: 'lewat', label: 'Sudah lewat expired' },
-  { value: 'h2', label: 'Expired ≤ 2 hari' },
-  { value: 'h7', label: 'Expired ≤ 7 hari' },
-]
-const SORTS = [
-  { value: 'baru', label: 'Terbaru masuk' },
-  { value: 'expired', label: 'Expired terdekat' },
-  { value: 'sedikit', label: 'Stok tersedikit' },
-  { value: 'nama', label: 'Nama A–Z' },
-]
+const MONEY = new Set(['cost_price', 'sell_price'])
 
 const usedQty = (b: Batch) => b.qty_sold + b.qty_rusak + b.qty_retur
 
@@ -84,27 +75,31 @@ export default function StockPage() {
   const [suppliers, setSuppliers] = useState<Map<number, string>>(new Map())
   const [products, setProducts] = useState<Map<number, { name: string; image_path: string | null; category_id: number | null }>>(new Map())
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('semua')
-  const [search, setSearch] = useState('')
+  const [params] = useSearchParams()
+  const paramFilter = params.get('filter')
+  const [filter, setFilter] = useState<Filter>(paramFilter === 'menipis' || paramFilter === 'jual' || paramFilter === 'retur' ? paramFilter : 'semua')
+  const [search, setSearch] = useState(params.get('q') ?? '')
   const [edit, setEdit] = useState<EditState | null>(null)
   const [rusakBatch, setRusakBatch] = useState<Batch | null>(null)
   const [busy, setBusy] = useState(false)
   const [categories, setCategories] = useState<Map<number, string>>(new Map())
-  const [supFilter, setSupFilter] = useState('')
-  const [catFilter, setCatFilter] = useState('')
-  const [expFilter, setExpFilter] = useState('')
-  const [sort, setSort] = useState('baru')
-  const [picked, setPicked] = useState<Set<number>>(new Set())
+  const [supplierF, setSupplierF] = useState('')
+  const [categoryF, setCategoryF] = useState('')
+  const [expiryF, setExpiryF] = useState<'' | 'today' | '3d' | '7d' | 'expired'>('')
+  const [sort, setSort] = useState<'masuk' | 'expired' | 'nama' | 'sisa-asc' | 'sisa-desc'>('masuk')
+  const [sel, setSel] = useState<Set<number>>(new Set())
   const [detail, setDetail] = useState<Batch | null>(null)
-  const [logs, setLogs] = useState<EditLog[] | null>(null)
-  const [people, setPeople] = useState<Map<string, string>>(new Map())
+  const [history, setHistory] = useState<EditRow[] | null>(null)
+  const [onPromo, setOnPromo] = useState<Set<number>>(new Set())
+  const [bulkExpiry, setBulkExpiry] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const [b, s, p, c] = await Promise.all([
+    const [b, s, p, c, pr] = await Promise.all([
       supabase.from('batch_stock').select('*').gt('qty_remaining', 0).order('received_date', { ascending: false }),
       supabase.from('suppliers').select('id, name').order('name'),
       supabase.from('products').select('id, name, image_path, category_id'),
-      supabase.from('categories').select('id, name'),
+      supabase.from('categories').select('id, name').order('name'),
+      supabase.rpc('promo_active_prices'),
     ])
     if (b.error) {
       notify(errText(b.error), 'error')
@@ -115,13 +110,11 @@ export default function StockPage() {
     setSuppliers(new Map((s.data ?? []).map((x) => [x.id as number, x.name as string])))
     setProducts(
       new Map(
-        (p.data ?? []).map((x) => [x.id as number, { name: x.name as string, image_path: x.image_path as string | null, category_id: x.category_id as number | null }]),
+        (p.data ?? []).map((x) => [x.id as number, { name: x.name as string, image_path: x.image_path as string | null, category_id: (x.category_id as number | null) ?? null }]),
       ),
     )
     setCategories(new Map((c.data ?? []).map((x) => [x.id as number, x.name as string])))
-    // buang pilihan untuk stok yang sudah tidak ada (terhapus atau habis)
-    const alive = new Set(((b.data ?? []) as Batch[]).map((x) => x.batch_id))
-    setPicked((cur) => new Set([...cur].filter((id) => alive.has(id))))
+    setOnPromo(new Set(pr.error ? [] : ((pr.data ?? []) as { batch_id: number }[]).map((x) => x.batch_id)))
     setLoading(false)
   }, [notify])
 
@@ -143,103 +136,74 @@ export default function StockPage() {
     retur: batches.filter(isWaiting).length,
   }
   const q = search.trim().toLowerCase()
-  const filtersOn = supFilter !== '' || catFilter !== '' || expFilter !== '' || sort !== 'baru'
-  const shown = useMemo(() => {
-    const list = batches.filter((b) => {
-      if (q && !nameOf(b).toLowerCase().includes(q)) return false
-      if (supFilter && String(b.supplier_id) !== supFilter) return false
-      if (catFilter && String(products.get(b.product_id)?.category_id ?? '') !== catFilter) return false
-      if (expFilter === 'lewat' && !(b.sellable_until < today)) return false
-      if (expFilter === 'h2' && !(b.sellable_until >= today && b.sellable_until <= addDays(today, 2))) return false
-      if (expFilter === 'h7' && !(b.sellable_until >= today && b.sellable_until <= addDays(today, 7))) return false
-      if (filter === 'jual') return isSelling(b)
-      if (filter === 'menipis') return isLow(b)
-      if (filter === 'retur') return isWaiting(b)
-      return true
-    })
-    const byName = (a: Batch, b: Batch) => nameOf(a).localeCompare(nameOf(b))
-    if (sort === 'expired') list.sort((a, b) => a.sellable_until.localeCompare(b.sellable_until) || byName(a, b))
-    else if (sort === 'sedikit') list.sort((a, b) => a.qty_remaining - b.qty_remaining || byName(a, b))
-    else if (sort === 'nama') list.sort(byName)
-    return list
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batches, q, supFilter, catFilter, expFilter, sort, filter, products, today])
+  const filtered = batches.filter((b) => {
+    if (q && !nameOf(b).toLowerCase().includes(q) && !supplierOf(b).toLowerCase().includes(q)) return false
+    if (supplierF && String(b.supplier_id) !== supplierF) return false
+    if (categoryF && String(products.get(b.product_id)?.category_id ?? '') !== categoryF) return false
+    if (expiryF === 'expired' && !(b.sellable_until < today)) return false
+    if (expiryF === 'today' && b.sellable_until !== today) return false
+    if (expiryF === '3d' && !(b.sellable_until >= today && b.sellable_until <= addDays(today, 3))) return false
+    if (expiryF === '7d' && !(b.sellable_until >= today && b.sellable_until <= addDays(today, 7))) return false
+    if (filter === 'jual') return isSelling(b)
+    if (filter === 'menipis') return isLow(b)
+    if (filter === 'retur') return isWaiting(b)
+    return true
+  })
+  const shown = [...filtered].sort((a, b) => {
+    if (sort === 'expired') return a.sellable_until.localeCompare(b.sellable_until) || nameOf(a).localeCompare(nameOf(b))
+    if (sort === 'nama') return nameOf(a).localeCompare(nameOf(b))
+    if (sort === 'sisa-asc') return a.qty_remaining - b.qty_remaining
+    if (sort === 'sisa-desc') return b.qty_remaining - a.qty_remaining
+    return b.received_date.localeCompare(a.received_date) || b.batch_id - a.batch_id
+  })
+  const activeFilters = [supplierF, categoryF, expiryF].filter(Boolean).length
+  const pg = usePagination(shown, `${filter}|${q}|${supplierF}|${categoryF}|${expiryF}|${sort}`, 12)
+  const pageIds = pg.slice.map((b) => b.batch_id)
+  const allOnPage = pageIds.length > 0 && pageIds.every((id) => sel.has(id))
+  const selected = batches.filter((b) => sel.has(b.batch_id))
 
-  const paged = usePaged(shown, [q, supFilter, catFilter, expFilter, sort, filter].join('|'), 24)
-
-  function resetFilters() {
-    setSupFilter('')
-    setCatFilter('')
-    setExpFilter('')
-    setSort('baru')
-  }
-  function togglePick(id: number) {
-    setPicked((cur) => {
+  function toggleSel(id: number) {
+    setSel((cur) => {
       const n = new Set(cur)
       if (n.has(id)) n.delete(id)
       else n.add(id)
       return n
     })
   }
-  const pageIds = paged.slice.map((b) => b.batch_id)
-  const pageAllPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id))
-
-  const pickedBatches = batches.filter((b) => picked.has(b.batch_id))
-  function exportPicked() {
-    const rows = [
-      ['Produk', 'Supplier', 'Tanggal masuk', 'Expired', 'Masuk', 'Terjual', 'Rusak', 'Retur', 'Sisa', 'Harga supplier', 'Harga jual'],
-      ...pickedBatches.map((b) => [nameOf(b), supplierOf(b), b.received_date, b.sellable_until, b.qty_in, b.qty_sold, b.qty_rusak, b.qty_retur, b.qty_remaining, b.cost_price, b.sell_price]),
-    ]
-    downloadBlob(csvBlob(rows), `stok-terpilih-${today}.csv`)
-  }
-  async function removePicked() {
-    const free = pickedBatches.filter((b) => usedQty(b) === 0)
-    const locked = pickedBatches.length - free.length
-    if (free.length === 0) {
-      notify('Tidak ada yang bisa dihapus: semua stok terpilih sudah ada penjualan, retur, atau barang rusak.', 'error')
-      return
-    }
-    const ok = await confirm({
-      title: `Hapus ${free.length} stok?`,
-      message: `${locked > 0 ? `${locked} stok yang sudah terpakai akan dilewati. ` : ''}Tindakan ini tidak bisa dibatalkan.`,
-      confirmText: 'Ya, hapus',
-      tone: 'danger',
+  function toggleAllOnPage() {
+    setSel((cur) => {
+      const n = new Set(cur)
+      if (allOnPage) pageIds.forEach((id) => n.delete(id))
+      else pageIds.forEach((id) => n.add(id))
+      return n
     })
-    if (!ok) return
-    setBusy(true)
-    let failed = 0
-    for (const b of free) {
-      const { error } = await supabase.rpc('delete_stock_batch', { p_batch_id: b.batch_id })
-      if (error) failed += 1
-    }
-    setBusy(false)
-    setPicked(new Set())
-    notify(failed > 0 ? `${free.length - failed} stok dihapus, ${failed} gagal.` : `${free.length} stok dihapus.`, failed > 0 ? 'error' : 'success')
-    await load()
+  }
+  function resetFilters() {
+    setSupplierF('')
+    setCategoryF('')
+    setExpiryF('')
+    setSort('masuk')
+    setFilter('semua')
+    setSearch('')
   }
 
-  // riwayat perubahan untuk stok yang sedang dilihat
+  // rincian satu stok: riwayat perubahan dimuat saat panel dibuka
   useEffect(() => {
     if (!detail) {
-      setLogs(null)
+      setHistory(null)
       return
     }
     let cancelled = false
-    void (async () => {
-      const { data, error } = await supabase.from('stock_batch_edits').select('*').eq('batch_id', detail.batch_id)
-      if (cancelled) return
-      if (error) {
-        setLogs([])
-        return
-      }
-      const list = ((data ?? []) as EditLog[]).sort((a, b) => String(b.edited_at ?? b.created_at ?? b.id ?? '').localeCompare(String(a.edited_at ?? a.created_at ?? a.id ?? '')))
-      setLogs(list)
-      const ids = [...new Set(list.map((l) => l.edited_by).filter((x): x is string => !!x))]
-      if (ids.length > 0) {
-        const pr = await supabase.from('profiles').select('id, full_name').in('id', ids)
-        if (!cancelled) setPeople(new Map((pr.data ?? []).map((x) => [x.id as string, (x.full_name as string) || '-'])))
-      }
-    })()
+    void supabase
+      .from('stock_batch_edits')
+      .select('*')
+      .eq('batch_id', detail.batch_id)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        const rows = (error ? [] : (data ?? [])) as EditRow[]
+        rows.sort((a, b) => stamp(b).localeCompare(stamp(a)))
+        setHistory(rows)
+      })
     return () => {
       cancelled = true
     }
@@ -260,13 +224,6 @@ export default function StockPage() {
     setEdit({ batch: b, supplierId: String(b.supplier_id), qty: String(b.qty_in), cost: String(b.cost_price), sell: String(b.sell_price), expired: b.sellable_until })
   }
 
-  const editDirty =
-    !!edit &&
-    (edit.qty !== String(edit.batch.qty_in) ||
-      edit.cost !== String(edit.batch.cost_price) ||
-      edit.sell !== String(edit.batch.sell_price) ||
-      edit.expired !== edit.batch.sellable_until)
-
   function validateEdit(e: EditState): string {
     const used = usedQty(e.batch)
     const qty = Number(e.qty)
@@ -275,8 +232,6 @@ export default function StockPage() {
     if (qty < used) return `Jumlah stok tidak boleh kurang dari yang sudah terpakai (${used}).`
     if (e.cost.trim() === '' || !Number.isInteger(Number(e.cost)) || Number(e.cost) < 0) return 'Harga supplier wajib diisi.'
     if (e.sell.trim() === '' || !Number.isInteger(Number(e.sell)) || Number(e.sell) < 0) return 'Harga jual wajib diisi.'
-    if (qty > MAX_QTY) return `Jumlah stok terlalu besar (maksimal ${MAX_QTY.toLocaleString('id-ID')}).`
-    if (Number(e.cost) > MAX_RUPIAH || Number(e.sell) > MAX_RUPIAH) return `Harga terlalu besar (maksimal Rp${MAX_RUPIAH.toLocaleString('id-ID')}).`
     if (e.expired === '') return 'Tanggal expired wajib diisi.'
     if (e.expired < e.batch.received_date) return 'Tanggal expired tidak boleh sebelum tanggal masuk.'
     return ''
@@ -338,7 +293,64 @@ export default function StockPage() {
     await load()
   }
 
+  async function bulkDelete() {
+    if (busy) return
+    const free = selected.filter((b) => usedQty(b) === 0)
+    const skipped = selected.length - free.length
+    if (free.length === 0) {
+      notify('Semua stok yang dipilih sudah terpakai (ada penjualan, retur, atau rusak), jadi tidak bisa dihapus.', 'error')
+      return
+    }
+    const ok = await confirm({
+      title: `Hapus ${free.length} stok?`,
+      message: `${free.slice(0, 4).map(nameOf).join(', ')}${free.length > 4 ? `, dan ${free.length - 4} lainnya` : ''} akan dihapus permanen.${skipped > 0 ? ` ${skipped} stok lain dilewati karena sudah terpakai.` : ''} Tindakan ini tidak bisa dibatalkan.`,
+      confirmText: `Ya, hapus ${free.length}`,
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusy(true)
+    let done = 0
+    let failed = 0
+    for (const b of free) {
+      const { error } = await supabase.rpc('delete_stock_batch', { p_batch_id: b.batch_id })
+      if (error) failed++
+      else done++
+    }
+    setBusy(false)
+    notify(`${done} stok dihapus${failed > 0 ? `, ${failed} gagal` : ''}${skipped > 0 ? `, ${skipped} dilewati` : ''}.`, failed > 0 ? 'error' : 'success')
+    setSel(new Set())
+    await load()
+  }
+
+  async function bulkSetExpiry(date: string) {
+    if (busy) return
+    setBusy(true)
+    let done = 0
+    let failed = 0
+    let firstError = ''
+    for (const b of selected) {
+      const { error } = await supabase.rpc('update_stock_batch', {
+        p_batch_id: b.batch_id,
+        p_supplier_id: b.supplier_id,
+        p_qty_in: b.qty_in,
+        p_cost_price: b.cost_price,
+        p_sell_price: b.sell_price,
+        p_expired_date: date,
+      })
+      if (error) {
+        failed++
+        firstError ||= errText(error)
+      } else done++
+    }
+    setBusy(false)
+    setBulkExpiry(null)
+    notify(`Expired ${done} stok diubah${failed > 0 ? `, ${failed} gagal (${firstError})` : ''}.`, failed > 0 ? 'error' : 'success')
+    setSel(new Set())
+    await load()
+  }
+
   const used = edit ? usedQty(edit.batch) : 0
+  const editDirty = !!edit && (edit.qty !== String(edit.batch.qty_in) || edit.cost !== String(edit.batch.cost_price) || edit.sell !== String(edit.batch.sell_price) || edit.expired !== edit.batch.sellable_until)
   const pills: { key: Filter; label: string }[] = [
     { key: 'semua', label: 'Semua' },
     { key: 'jual', label: 'Dijual hari ini' },
@@ -361,7 +373,7 @@ export default function StockPage() {
       <div className="toolbar">
         <div className="search">
           <Search size={18} />
-          <input placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder="Cari produk atau supplier…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="pills">
           {pills.map((p) => (
@@ -372,17 +384,57 @@ export default function StockPage() {
         </div>
       </div>
 
-      <div className="st-filters" role="group" aria-label="Filter stok">
-        <SelectSheet label="Supplier" emptyLabel="Semua supplier" value={supFilter} onChange={setSupFilter} options={[...suppliers.entries()].map(([id, name]) => ({ value: String(id), label: name }))} />
-        <SelectSheet label="Kategori" emptyLabel="Semua kategori" value={catFilter} onChange={setCatFilter} options={[...categories.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => ({ value: String(id), label: name }))} />
-        <SelectSheet label="Expired" emptyLabel="Semua tanggal expired" value={expFilter} onChange={setExpFilter} options={EXP_FILTERS} />
-        <SelectSheet label="Urutkan" value={sort} onChange={setSort} options={SORTS} />
-        {filtersOn && (
-          <button type="button" className="btn-sm btn-ghost btn-icon" onClick={resetFilters}>
-            <X size={14} /> Atur ulang
-          </button>
+      <div className="stk-filters no-print">
+        <SelectSheet
+          label="Supplier"
+          value={supplierF}
+          onChange={(v) => setSupplierF(String(v))}
+          placeholder="Semua supplier"
+          options={[{ value: '', label: 'Semua supplier' }, ...[...suppliers].map(([id, name]) => ({ value: String(id), label: name }))]}
+        />
+        <SelectSheet
+          label="Kategori"
+          value={categoryF}
+          onChange={(v) => setCategoryF(String(v))}
+          placeholder="Semua kategori"
+          options={[{ value: '', label: 'Semua kategori' }, ...[...categories].map(([id, name]) => ({ value: String(id), label: name }))]}
+        />
+        <SelectSheet
+          label="Masa expired"
+          value={expiryF}
+          onChange={(v) => setExpiryF(String(v) as typeof expiryF)}
+          placeholder="Semua masa expired"
+          options={[
+            { value: '', label: 'Semua masa expired' },
+            { value: 'today', label: 'Expired hari ini' },
+            { value: '3d', label: 'Expired ≤ 3 hari' },
+            { value: '7d', label: 'Expired ≤ 7 hari' },
+            { value: 'expired', label: 'Sudah lewat expired' },
+          ]}
+        />
+        <SelectSheet
+          label="Urutkan"
+          value={sort}
+          onChange={(v) => setSort(String(v) as typeof sort)}
+          options={[
+            { value: 'masuk', label: 'Terbaru masuk' },
+            { value: 'expired', label: 'Expired terdekat' },
+            { value: 'nama', label: 'Nama A–Z' },
+            { value: 'sisa-asc', label: 'Sisa paling sedikit' },
+            { value: 'sisa-desc', label: 'Sisa paling banyak' },
+          ]}
+        />
+        {(activeFilters > 0 || sort !== 'masuk' || filter !== 'semua' || search) && (
+          <button type="button" className="stk-reset" onClick={resetFilters}>Reset filter</button>
         )}
       </div>
+
+      {!loading && shown.length > 0 && (
+        <label className="stk-selectall no-print">
+          <input type="checkbox" className="rowcheck" checked={allOnPage} onChange={toggleAllOnPage} />
+          Pilih semua di halaman ini ({pageIds.length})
+        </label>
+      )}
 
       {loading ? (
         <div className="stock-grid">
@@ -404,30 +456,16 @@ export default function StockPage() {
         <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian atau pilih filter lain." />
       ) : (
         <div className="stock-grid">
-          {paged.slice.map((b, i) => {
+          {pg.slice.map((b, i) => {
             const img = products.get(b.product_id)?.image_path
             const locked = usedQty(b) > 0
             return (
-              <article key={b.batch_id} className={`stock-card${picked.has(b.batch_id) ? ' is-picked' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
-                <label className="sel-box" title="Pilih stok ini">
-                  <input type="checkbox" checked={picked.has(b.batch_id)} onChange={() => togglePick(b.batch_id)} aria-label={`Pilih ${nameOf(b)} dari ${supplierOf(b)}`} />
-                </label>
-                <div
-                  className="stock-top st-link"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Lihat detail ${nameOf(b)}`}
-                  onClick={() => setDetail(b)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter' || ev.key === ' ') {
-                      ev.preventDefault()
-                      setDetail(b)
-                    }
-                  }}
-                >
+              <article key={b.batch_id} className={`stock-card${sel.has(b.batch_id) ? ' selected' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
+                <input type="checkbox" className="rowcheck stk-check" checked={sel.has(b.batch_id)} onChange={() => toggleSel(b.batch_id)} aria-label={`Pilih ${nameOf(b)}`} />
+                <div className="stock-top">
                   {img ? <img className="stock-img" src={imageUrl(img)} alt="" loading="lazy" /> : <div className="stock-img" />}
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="stock-name">{nameOf(b)}</div>
+                    <button type="button" className="stock-name stk-link" onClick={() => setDetail(b)}>{nameOf(b)}</button>
                     <div className="page-sub">{supplierOf(b)}</div>
                     <div style={{ marginTop: 4 }}>{statusBadge(b)}</div>
                   </div>
@@ -447,6 +485,9 @@ export default function StockPage() {
                 </div>
 
                 <div className="card-actions">
+                  <button className="btn-sm btn-icon" onClick={() => setDetail(b)}>
+                    <Eye size={15} /> Detail
+                  </button>
                   <button className="btn-sm btn-icon" onClick={() => navigate(`/retur?supplier=${b.supplier_id}&batch=${b.batch_id}`)}>
                     <Undo2 size={15} /> Retur
                   </button>
@@ -471,111 +512,125 @@ export default function StockPage() {
         </div>
       )}
 
-      {!loading && shown.length > 0 && <Pagination paged={paged} sizes={[12, 24, 48, 96]} />}
+      {!loading && shown.length > 0 && (
+        <Pagination page={pg.page} pages={pg.pages} pageSize={pg.pageSize} total={pg.total} onPage={pg.setPage} onPageSize={pg.setPageSize} sizes={[12, 24, 48, 96]} />
+      )}
 
-      <BulkBar count={picked.size}>
-        <button type="button" className="btn-sm" onClick={() => setPicked((cur) => { const n = new Set(cur); pageIds.forEach((id) => (pageAllPicked ? n.delete(id) : n.add(id))); return n })}>
-          {pageAllPicked ? 'Batal pilih halaman ini' : `Pilih halaman ini (${pageIds.length})`}
+      <BulkBar count={sel.size} onClear={() => setSel(new Set())}>
+        <button type="button" disabled={busy} onClick={() => setBulkExpiry(addDays(today, 1))}>
+          <CalendarClock size={16} /> Ubah expired
         </button>
-        {shown.length > pageIds.length && (
-          <button type="button" className="btn-sm" onClick={() => setPicked(new Set(shown.map((b) => b.batch_id)))}>
-            Pilih semua hasil ({shown.length})
-          </button>
-        )}
-        <button type="button" className="btn-sm btn-icon" onClick={exportPicked}>
-          <Download size={15} /> Ekspor CSV
+        <button type="button" disabled={busy} onClick={() => navigate(`/promo?batch=${selected.map((b) => b.batch_id).join(',')}`)}>
+          <BadgePercent size={16} /> Promokan
         </button>
-        <button type="button" className="btn-sm btn-icon btn-danger" disabled={busy} onClick={() => void removePicked()}>
-          <Trash2 size={15} /> Hapus
+        <button type="button" className="danger" disabled={busy} onClick={() => void bulkDelete()}>
+          <Trash2 size={16} /> Hapus
         </button>
-        <button type="button" className="btn-sm btn-ghost" onClick={() => setPicked(new Set())}>Batal</button>
       </BulkBar>
 
-      {detail && (() => {
-        const d = batches.find((x) => x.batch_id === detail.batch_id) ?? detail
-        const img = products.get(d.product_id)?.image_path
-        const cat = categories.get(products.get(d.product_id)?.category_id ?? -1)
-        const locked = usedQty(d) > 0
-        const margin = d.sell_price - d.cost_price
-        return (
-          <Drawer
-            title="Detail stok"
-            onClose={() => setDetail(null)}
-            footer={
-              <>
-                <button className="btn-sm btn-icon" onClick={() => { setDetail(null); navigate(`/retur?supplier=${d.supplier_id}&batch=${d.batch_id}`) }}>
-                  <Undo2 size={15} /> Retur
-                </button>
-                <button className="btn-sm btn-icon" onClick={() => { setDetail(null); setRusakBatch(d) }}>
-                  <PackageX size={15} /> Rusak
-                </button>
-                <button className="btn-sm btn-icon" onClick={() => { setDetail(null); startEdit(d) }}>
-                  <Pencil size={15} /> Ubah
-                </button>
-                <button className="btn-sm btn-icon btn-danger" style={{ opacity: locked ? 0.5 : 1 }} onClick={() => { setDetail(null); void remove(d) }}>
-                  <Trash2 size={15} /> Hapus
-                </button>
-              </>
-            }
-          >
-            <div className="dr-top">
-              {img ? <img src={imageUrl(img)} alt="" /> : <div className="dr-noimg" />}
-              <div style={{ minWidth: 0 }}>
-                <div className="stock-name">{nameOf(d)}</div>
-                <div className="page-sub">{supplierOf(d)}{cat ? ` · ${cat}` : ''}</div>
-                <div style={{ marginTop: 4 }}>{statusBadge(d)}</div>
-              </div>
+      {bulkExpiry !== null && (
+        <Modal
+          size="sm"
+          title={`Ubah expired ${selected.length} stok`}
+          onClose={() => !busy && setBulkExpiry(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setBulkExpiry(null)} disabled={busy}>Batal</button>
+              <button type="button" className="btn-primary" disabled={busy || !bulkExpiry} onClick={() => void bulkSetExpiry(bulkExpiry)}>
+                {busy ? 'Menyimpan…' : 'Terapkan'}
+              </button>
+            </>
+          }
+        >
+          <div className="se-form">
+            <p style={{ margin: 0, color: 'var(--muted)' }}>Tanggal expired baru berlaku untuk semua stok yang dipilih. Jumlah dan harga tidak berubah.</p>
+            <DatePicker
+              value={bulkExpiry}
+              min={selected.reduce((m, b) => (b.received_date > m ? b.received_date : m), '')}
+              onChange={setBulkExpiry}
+              ariaLabel="Tanggal expired baru"
+              presets={[{ label: 'Besok', days: 1 }, { label: '+3 hari', days: 3 }, { label: '+1 minggu', days: 7 }, { label: '+2 minggu', days: 14 }]}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {detail && (
+        <Drawer
+          title={nameOf(detail)}
+          subtitle={`${supplierOf(detail)} · masuk ${formatDateLong(detail.received_date)}`}
+          onClose={() => setDetail(null)}
+          footer={
+            <>
+              <button type="button" className="btn-icon" onClick={() => { const b = detail; setDetail(null); startEdit(b) }}>
+                <Pencil size={15} /> Ubah
+              </button>
+              <button type="button" className="btn-icon" onClick={() => navigate(`/retur?supplier=${detail.supplier_id}&batch=${detail.batch_id}`)}>
+                <Undo2 size={15} /> Retur
+              </button>
+              <button type="button" className="btn-icon" onClick={() => { const b = detail; setDetail(null); setRusakBatch(b) }}>
+                <PackageX size={15} /> Rusak
+              </button>
+            </>
+          }
+        >
+          <div className="dr-hero">
+            {products.get(detail.product_id)?.image_path ? <img src={imageUrl(products.get(detail.product_id)!.image_path!)} alt="" /> : <div className="dr-noimg" />}
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span>{statusBadge(detail)}</span>
+              {onPromo.has(detail.batch_id) && <span className="badge badge-info">Sedang promo</span>}
+              <small style={{ color: 'var(--muted)' }}>{categories.get(products.get(detail.product_id)?.category_id ?? -1) ?? 'Tanpa kategori'}</small>
             </div>
-
-            <div className="dr-stats">
-              <div><b>{d.qty_in}</b><span>Masuk</span></div>
-              <div><b>{d.qty_sold}</b><span>Terjual</span></div>
-              <div><b>{d.qty_rusak}</b><span>Rusak</span></div>
-              <div><b>{d.qty_retur}</b><span>Retur</span></div>
-              <div><b style={{ color: d.qty_remaining <= LOW_STOCK ? 'var(--warning)' : 'var(--primary)' }}>{d.qty_remaining}</b><span>Sisa</span></div>
-            </div>
-
-            <dl className="dr-list">
-              <div><dt>Tanggal masuk</dt><dd>{formatDateLong(d.received_date)}</dd></div>
-              <div><dt>Expired</dt><dd>{formatDateLong(d.sellable_until)}</dd></div>
-              <div><dt>Batas retur</dt><dd>{formatDateLong(d.return_due_date)}</dd></div>
-              <div><dt>Harga supplier</dt><dd>{rupiah(d.cost_price)}</dd></div>
-              <div><dt>Harga jual</dt><dd>{rupiah(d.sell_price)}</dd></div>
-              <div><dt>Laba per barang</dt><dd style={{ color: margin < 0 ? 'var(--danger)' : undefined }}>{rupiah(margin)}</dd></div>
-              <div><dt>Nilai sisa (harga jual)</dt><dd>{rupiah(d.qty_remaining * d.sell_price)}</dd></div>
-            </dl>
-
-            <section className="dr-sec">
-              <h3>Riwayat perubahan</h3>
-              {logs === null ? (
-                <div className="skeleton" style={{ height: 52, borderRadius: 10 }} />
-              ) : logs.length === 0 ? (
-                <div className="page-sub">Belum pernah diubah.</div>
-              ) : (
-                <div className="dr-hist">
-                  {logs.map((l, i) => {
-                    const when = String(l.edited_at ?? l.created_at ?? '')
-                    const keys = Object.keys(LOG_LABEL).filter((k) => l.new_values && l.old_values && String(l.old_values[k] ?? '') !== String(l.new_values[k] ?? ''))
-                    const show = (k: string, v: unknown) => (k === 'supplier_id' ? suppliers.get(Number(v)) ?? String(v) : k.endsWith('price') ? rupiah(Number(v)) : String(v ?? '-'))
-                    return (
-                      <div className="dr-hist-item" key={l.id ?? i}>
-                        <strong>{l.action === 'hapus' ? 'Dihapus' : 'Diubah'}</strong>
-                        {keys.map((k) => (
-                          <span key={k}>{LOG_LABEL[k]}: {show(k, l.old_values?.[k])} → {show(k, l.new_values?.[k])}</span>
-                        ))}
-                        <small>
-                          {l.edited_by ? people.get(l.edited_by) ?? '-' : '-'}
-                          {when ? ` · ${new Date(when).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta' })}` : ''}
-                        </small>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
-          </Drawer>
-        )
-      })()}
+          </div>
+          <section className="dr-sec">
+            <h3>Stok</h3>
+            <DetailRow label="Masuk">{detail.qty_in}</DetailRow>
+            <DetailRow label="Terjual">{detail.qty_sold}</DetailRow>
+            <DetailRow label="Rusak">{detail.qty_rusak}</DetailRow>
+            <DetailRow label="Diretur">{detail.qty_retur}</DetailRow>
+            <DetailRow label="Sisa">{detail.qty_remaining}</DetailRow>
+            <div className="bar" style={{ marginTop: 8 }}><i style={{ width: `${(detail.qty_sold / detail.qty_in) * 100}%` }} /></div>
+          </section>
+          <section className="dr-sec">
+            <h3>Harga</h3>
+            <DetailRow label="Harga supplier">{rupiah(detail.cost_price)}</DetailRow>
+            <DetailRow label="Harga jual">{rupiah(detail.sell_price)}</DetailRow>
+            <DetailRow label="Untung per pcs">{rupiah(detail.sell_price - detail.cost_price)}</DetailRow>
+            <DetailRow label="Nilai sisa (modal)">{rupiah(detail.qty_remaining * detail.cost_price)}</DetailRow>
+            <DetailRow label="Potensi omzet sisa">{rupiah(detail.qty_remaining * detail.sell_price)}</DetailRow>
+          </section>
+          <section className="dr-sec">
+            <h3>Tanggal</h3>
+            <DetailRow label="Masuk">{formatDateLong(detail.received_date)}</DetailRow>
+            <DetailRow label="Dijual sampai">{formatDateLong(detail.sellable_until)}</DetailRow>
+            <DetailRow label="Batas retur">{formatDateLong(detail.return_due_date)}</DetailRow>
+          </section>
+          <section className="dr-sec">
+            <h3>Riwayat perubahan</h3>
+            {history === null ? (
+              <p className="hint" style={{ margin: 0 }}>Memuat…</p>
+            ) : history.length === 0 ? (
+              <p className="hint" style={{ margin: 0, color: 'var(--muted)' }}>Belum ada perubahan data pada stok ini.</p>
+            ) : (
+              <ul className="hist">
+                {history.map((h, i) => {
+                  const keys = Object.keys(h.new_values ?? {}).filter((k) => JSON.stringify(h.new_values?.[k]) !== JSON.stringify(h.old_values?.[k]))
+                  const fmt = (k: string, v: unknown) => (v == null ? '-' : MONEY.has(k) ? rupiah(Number(v)) : k === 'expired_date' ? formatDateLong(String(v)) : k === 'supplier_id' ? (suppliers.get(Number(v)) ?? String(v)) : String(v))
+                  return (
+                    <li key={i}>
+                      <b>{h.action === 'ubah' || !h.action ? 'Diubah' : h.action}</b>
+                      {stamp(h) && <small>{new Date(stamp(h)).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' })}</small>}
+                      {keys.length === 0 ? <small>Tanpa perubahan nilai.</small> : keys.map((k) => (
+                        <small key={k}>{FIELD_LABEL[k] ?? k}: {fmt(k, h.old_values?.[k])} → <b>{fmt(k, h.new_values?.[k])}</b></small>
+                      ))}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+        </Drawer>
+      )}
 
       {rusakBatch && (
         <Modal title="Catat barang rusak" onClose={() => setRusakBatch(null)}>
@@ -618,6 +673,13 @@ export default function StockPage() {
                 <small>Masuk {formatDateLong(edit.batch.received_date)} · terpakai {used} dari {edit.batch.qty_in}</small>
               </div>
             </div>
+
+            {onPromo.has(edit.batch.batch_id) && (
+              <div className="notice notice-info">
+                <Info size={18} />
+                <span>Stok ini sedang promo, jadi harga yang tampil adalah harga promo. Perubahan harga akan kembali ke harga normal saat promo selesai.</span>
+              </div>
+            )}
 
             {used > 0 && (
               <div className="notice notice-warning">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react'
-import { ImagePlus, MessageCircle, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { Eye, ImagePlus, MessageCircle, Package, Pencil, Plus, Power, PowerOff, Search, Trash2, TriangleAlert, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from './Toast'
@@ -9,12 +9,16 @@ import PageHeader from './PageHeader'
 import EmptyState from './EmptyState'
 import ViewOptions, { type OptionGroup } from './ViewOptions'
 import { useStoredState } from '../lib/prefs'
-import Pagination, { usePaged } from './Pagination'
-import BulkBar from './BulkBar'
-import SelectSheet from './SelectSheet'
 import { imageUrl, uploadProductImage } from '../lib/image'
 import { errText } from '../lib/errors'
+import SelectSheet from './SelectSheet'
+import Pagination from './Pagination'
+import Drawer, { DetailRow } from './Drawer'
+import BulkBar from './BulkBar'
+import { usePagination } from '../lib/usePagination'
+import { useSubmitLock } from '../lib/useSubmitLock'
 import './CrudPage.css'
+import '../pages/StockPage.css'
 
 export interface Field {
   key: string
@@ -86,9 +90,12 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
   const [pick, setPick] = useState('')
   const [stat, setStat] = useState<Map<number, number>>(new Map())
   const [quickName, setQuickName] = useState('')
-  const [initialForm, setInitialForm] = useState('')
-  const [picked, setPicked] = useState<Set<number>>(new Set())
   const quickRef = useRef<HTMLInputElement>(null)
+  const initialForm = useRef('')
+  const submit = useSubmitLock()
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  const [detail, setDetail] = useState<Row | null>(null)
+  const [dupAck, setDupAck] = useState(false)
   const [prefs, setPrefs, resetPrefs] = useStoredState(`titipin:${table}:tampilan:v1`, VIEW_DEFAULTS)
 
   const load = useCallback(async () => {
@@ -140,7 +147,8 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     })
     resetImage()
     setForm(f)
-    setInitialForm(JSON.stringify(f))
+    initialForm.current = JSON.stringify(f)
+    setDupAck(false)
     setExistingPath('')
     setEditing('new')
   }
@@ -153,7 +161,8 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     })
     resetImage()
     setForm(f)
-    setInitialForm(JSON.stringify(f))
+    initialForm.current = JSON.stringify(f)
+    setDupAck(false)
     setExistingPath(imageField ? String(row[imageField.key] ?? '') : '')
     setEditing(row)
   }
@@ -184,16 +193,20 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     return ''
   }
 
-  async function save(e: FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault()
+    void submit.run(doSave)
+  }
+
+  async function doSave() {
     if (editing === null) return
     const msg = validate()
     if (msg) {
       notify(msg, 'error')
       return
     }
-    if (dupRow) {
-      notify(`${cap(noun)} "${String(form[titleKey] ?? '').trim()}" sudah ada. Gunakan nama lain atau ubah data yang sudah ada.`, 'error')
+    if (exactDupes.length > 0 && !dupAck) {
+      notify(`${cap(noun)} dengan nama yang sama sudah ada. Centang "Tetap simpan" bila memang disengaja.`, 'error')
       return
     }
     setBusy(true)
@@ -259,8 +272,12 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
     notify(`${String(row[titleKey] ?? '')} ${next ? 'diaktifkan' : 'dinonaktifkan'}.`)
   }
 
-  async function addQuick(e: FormEvent) {
+  function addQuick(e: FormEvent) {
     e.preventDefault()
+    void submit.run(doAddQuick)
+  }
+
+  async function doAddQuick() {
     const name = quickName.trim()
     if (!name) return
     if (rows.some((r) => String(r[titleKey] ?? '').trim().toLowerCase() === name.toLowerCase())) {
@@ -311,53 +328,91 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
       return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''))
     })
 
-  const paged = usePaged(shown, [q, status, pick, prefs.sort].join('|'), 24)
-  const pageIds = paged.slice.map((r) => r.id as number)
-  const pageAllPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id))
-  const pickedRows = rows.filter((r) => picked.has(r.id as number))
-  const togglePick = (id: number) =>
-    setPicked((cur) => {
+  // ---- paginasi
+  const imgGrid = Boolean(imageField) && prefs.view === 'cards'
+  const pg = usePagination(shown, `${q}|${status}|${pick}|${prefs.sort}|${prefs.view}`, imgGrid ? 12 : 20)
+  const pageIds = pg.slice.map((r) => r.id as number)
+  const allOnPage = pageIds.length > 0 && pageIds.every((id) => sel.has(id))
+  const selectedRows = rows.filter((r) => sel.has(r.id as number))
+  const toggleSel = (id: number) =>
+    setSel((cur) => {
       const n = new Set(cur)
       if (n.has(id)) n.delete(id)
       else n.add(id)
       return n
     })
+  const toggleAllOnPage = () =>
+    setSel((cur) => {
+      const n = new Set(cur)
+      if (allOnPage) pageIds.forEach((id) => n.delete(id))
+      else pageIds.forEach((id) => n.add(id))
+      return n
+    })
 
   async function bulkActive(on: boolean) {
-    if (!activeField || pickedRows.length === 0) return
-    setBusy(true)
-    const { data, error } = await supabase.from(table).update({ [activeField.key]: on }).in('id', pickedRows.map((r) => r.id as number)).select('id')
-    setBusy(false)
-    if (error || !data || data.length === 0) {
-      notify(error ? errText(error) : 'Perubahan ditolak. Hanya admin yang boleh mengubah data.', 'error')
-      return
-    }
-    notify(`${data.length} ${noun} ${on ? 'diaktifkan' : 'dinonaktifkan'}.`)
-    setPicked(new Set())
-    await load()
+    if (!activeField || selectedRows.length === 0) return
+    await submit.run(async () => {
+      const ok = await confirm({
+        title: `${on ? 'Aktifkan' : 'Nonaktifkan'} ${selectedRows.length} ${noun}?`,
+        message: on ? `${cap(noun)} yang dipilih akan tampil kembali.` : `${cap(noun)} yang dipilih tidak muncul lagi di pilihan, tetapi datanya tetap tersimpan.`,
+        confirmText: on ? 'Ya, aktifkan' : 'Ya, nonaktifkan',
+        tone: on ? 'primary' : 'danger',
+      })
+      if (!ok) return
+      setBusy(true)
+      const { data, error } = await supabase.from(table).update({ [activeField.key]: on }).in('id', selectedRows.map((r) => r.id as number)).select('id')
+      setBusy(false)
+      if (error) return notify(errText(error), 'error')
+      notify(`${data?.length ?? 0} ${noun} ${on ? 'diaktifkan' : 'dinonaktifkan'}.`)
+      setSel(new Set())
+      await load()
+    })
   }
 
-  async function bulkRemove() {
-    if (pickedRows.length === 0) return
-    const ok = await confirm({
-      title: `Hapus ${pickedRows.length} ${noun}?`,
-      message: `Yang sudah dipakai di data lain akan ditolak dan dilewati. Sebaiknya nonaktifkan saja jika masih dipakai.`,
-      confirmText: 'Ya, hapus',
-      tone: 'danger',
+  async function bulkDelete() {
+    if (selectedRows.length === 0) return
+    await submit.run(async () => {
+      const ok = await confirm({
+        title: `Hapus ${selectedRows.length} ${noun}?`,
+        message: `${selectedRows.slice(0, 4).map((r) => String(r[titleKey] ?? '')).join(', ')}${selectedRows.length > 4 ? `, dan ${selectedRows.length - 4} lainnya` : ''} akan dihapus permanen. Yang sudah dipakai di data lain akan ditolak dan dilewati.`,
+        confirmText: `Ya, hapus ${selectedRows.length}`,
+        tone: 'danger',
+      })
+      if (!ok) return
+      setBusy(true)
+      let done = 0
+      let failed = 0
+      for (const r of selectedRows) {
+        const { data, error } = await supabase.from(table).delete().eq('id', r.id as number).select('id')
+        if (error || !data || data.length === 0) failed++
+        else done++
+      }
+      setBusy(false)
+      notify(`${done} ${noun} dihapus${failed > 0 ? `, ${failed} ditolak (masih dipakai atau tanpa izin)` : ''}.`, failed > 0 ? 'error' : 'success')
+      setSel(new Set())
+      await load()
     })
-    if (!ok) return
-    setBusy(true)
-    let done = 0
-    for (const r of pickedRows) {
-      const { data, error } = await supabase.from(table).delete().eq('id', r.id as number).select('id')
-      if (!error && data && data.length > 0) done += 1
-    }
-    setBusy(false)
-    const failed = pickedRows.length - done
-    notify(failed > 0 ? `${done} ${noun} dihapus, ${failed} ditolak (masih dipakai atau tidak diizinkan).` : `${done} ${noun} dihapus.`, failed > 0 ? 'error' : 'success')
-    setPicked(new Set())
-    await load()
   }
+
+  // ---- peringatan data kembar: nama sama persis (perlu dicentang untuk lanjut) dan nama mirip (hanya info)
+  const norm = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const nameNow = editing === null ? '' : norm(form[titleKey])
+  const codeFields = fields.filter((f) => f.type === 'text' && ['code', 'kode', 'sku', 'barcode'].includes(f.key))
+  const editingId = editing !== null && editing !== 'new' ? (editing.id as number) : null
+  const exactDupes =
+    editing === null
+      ? []
+      : rows.filter(
+          (r) =>
+            (r.id as number) !== editingId &&
+            ((nameNow !== '' && norm(r[titleKey]) === nameNow) ||
+              codeFields.some((f) => norm(form[f.key]) !== '' && norm(r[f.key]) === norm(form[f.key]))),
+        )
+  const similar =
+    editing === null || nameNow.length < 4
+      ? []
+      : rows.filter((r) => (r.id as number) !== editingId && norm(r[titleKey]) !== nameNow && (norm(r[titleKey]).includes(nameNow) || nameNow.includes(norm(r[titleKey])))).slice(0, 3)
+  const formDirty = editing !== null && (JSON.stringify(form) !== initialForm.current || !!newFile)
 
   const viewGroups: OptionGroup[] = [
     { type: 'seg', key: 'view', label: 'Tampilan', choices: [{ value: 'cards', label: 'Kartu' }, { value: 'list', label: 'Daftar' }] },
@@ -420,6 +475,9 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
             <MessageCircle size={15} /> WhatsApp
           </a>
         )}
+        <button type="button" className="btn-sm btn-icon" onClick={() => setDetail(row)} aria-label={`Detail ${String(row[titleKey] ?? '')}`}>
+          <Eye size={15} /> Detail
+        </button>
         {isAdmin && (
           <>
             {activeField && (
@@ -446,13 +504,6 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
   }
 
   const noneYet = rows.length === 0
-  // peringatan dini: nama sudah dipakai data lain (tanpa membedakan huruf besar/kecil)
-  const typedName = String(form[titleKey] ?? '').trim().toLowerCase()
-  const dupRow =
-    editing !== null && typedName !== ''
-      ? rows.find((r) => String(r[titleKey] ?? '').trim().toLowerCase() === typedName && (editing === 'new' || r !== editing && r.id !== (editing as Row).id))
-      : undefined
-  const formDirty = editing !== null && (JSON.stringify(form) !== initialForm || newFile !== null)
   const imgCards = Boolean(imageField) && prefs.view === 'cards'
 
   return (
@@ -515,12 +566,19 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
       )}
 
       {quickAdd && (
-        <form className="cp-quick" onSubmit={(e) => void addQuick(e)}>
+        <form className="cp-quick" onSubmit={addQuick}>
           <input ref={quickRef} placeholder={`Ketik nama ${noun} baru, lalu Enter`} value={quickName} onChange={(e) => setQuickName(e.target.value)} maxLength={80} aria-label={`Nama ${noun} baru`} />
           <button type="submit" className="btn-primary btn-icon" disabled={busy || !quickName.trim()}>
             <Plus size={16} /> Tambah
           </button>
         </form>
+      )}
+
+      {isAdmin && !loading && shown.length > 0 && (
+        <label className="stk-selectall no-print">
+          <input type="checkbox" className="rowcheck" checked={allOnPage} onChange={toggleAllOnPage} />
+          Pilih semua di halaman ini ({pageIds.length})
+        </label>
       )}
 
       {loading ? (
@@ -539,21 +597,17 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         <EmptyState title="Tidak ada yang cocok" text="Coba ubah kata pencarian atau filter." />
       ) : imgCards ? (
         <div className="catalog cp-grid" data-size={prefs.size}>
-          {paged.slice.map((row) => {
+          {pg.slice.map((row) => {
             const img = imageField ? (row[imageField.key] as string | null) : null
             return (
-              <article key={row.id as number} className={`pcard cp-card${isOff(row) ? ' off' : ''}${picked.has(row.id as number) ? ' is-picked' : ''}`}>
-                {isAdmin && (
-                  <label className="sel-box" title="Pilih">
-                    <input type="checkbox" checked={picked.has(row.id as number)} onChange={() => togglePick(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />
-                  </label>
-                )}
+              <article key={row.id as number} className={`pcard cp-card${isOff(row) ? ' off' : ''}${sel.has(row.id as number) ? ' selected' : ''}`}>
+                {isAdmin && <input type="checkbox" className="rowcheck cp-check" checked={sel.has(row.id as number)} onChange={() => toggleSel(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />}
                 <div className="cp-media">
                   {img ? <img src={imageUrl(img)} alt="" loading="lazy" /> : <Package size={34} />}
                   {statChip(row)}
                 </div>
                 <div className="pcard-body">
-                  <div className="pcard-title">{String(row[titleKey] ?? '')}</div>
+                  <button type="button" className="pcard-title cp-link" onClick={() => setDetail(row)}>{String(row[titleKey] ?? '')}</button>
                   <div className="tags">{badges(row)}</div>
                   {metaLines(row)}
                 </div>
@@ -564,22 +618,18 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         </div>
       ) : (
         <div className={`cp-list${prefs.view === 'list' ? ' single' : ''}`}>
-          {paged.slice.map((row) => {
+          {pg.slice.map((row) => {
             const img = imageField ? (row[imageField.key] as string | null) : null
             return (
-              <article key={row.id as number} className={`cp-item${isOff(row) ? ' off' : ''}${picked.has(row.id as number) ? ' is-picked' : ''}`}>
-                {isAdmin && (
-                  <label className="sel-box cp-sel" title="Pilih">
-                    <input type="checkbox" checked={picked.has(row.id as number)} onChange={() => togglePick(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />
-                  </label>
-                )}
+              <article key={row.id as number} className={`cp-item${isOff(row) ? ' off' : ''}${sel.has(row.id as number) ? ' selected' : ''}`}>
+                {isAdmin && <input type="checkbox" className="rowcheck" checked={sel.has(row.id as number)} onChange={() => toggleSel(row.id as number)} aria-label={`Pilih ${String(row[titleKey] ?? '')}`} />}
                 {imageField ? (
                   img ? <img className="cp-thumb" src={imageUrl(img)} alt="" loading="lazy" /> : <span className="cp-thumb"><Package size={20} /></span>
                 ) : (
                   <span className="avatar">{String(row[titleKey] ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>
                 )}
                 <div className="cp-item-main">
-                  <strong>{String(row[titleKey] ?? '')}</strong>
+                  <button type="button" className="cp-link" onClick={() => setDetail(row)}><strong>{String(row[titleKey] ?? '')}</strong></button>
                   {metaLines(row)}
                   <div className="tags">
                     {badges(row)}
@@ -593,32 +643,68 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
         </div>
       )}
 
-      {!loading && shown.length > 0 && <Pagination paged={paged} sizes={[12, 24, 48, 96]} />}
+      {!loading && shown.length > 0 && (
+        <Pagination page={pg.page} pages={pg.pages} pageSize={pg.pageSize} total={pg.total} onPage={pg.setPage} onPageSize={pg.setPageSize} sizes={imgGrid ? [12, 24, 48, 96] : [10, 20, 50, 100]} />
+      )}
 
-      <BulkBar count={picked.size}>
-        <button type="button" className="btn-sm" onClick={() => setPicked((cur) => { const n = new Set(cur); pageIds.forEach((id) => (pageAllPicked ? n.delete(id) : n.add(id))); return n })}>
-          {pageAllPicked ? 'Batal pilih halaman ini' : `Pilih halaman ini (${pageIds.length})`}
-        </button>
-        {shown.length > pageIds.length && (
-          <button type="button" className="btn-sm" onClick={() => setPicked(new Set(shown.map((r) => r.id as number)))}>
-            Pilih semua hasil ({shown.length})
-          </button>
-        )}
+      <BulkBar count={sel.size} onClear={() => setSel(new Set())}>
         {activeField && (
           <>
-            <button type="button" className="btn-sm" disabled={busy} onClick={() => void bulkActive(true)}>Aktifkan</button>
-            <button type="button" className="btn-sm" disabled={busy} onClick={() => void bulkActive(false)}>Nonaktifkan</button>
+            <button type="button" disabled={busy} onClick={() => void bulkActive(true)}>
+              <Power size={16} /> Aktifkan
+            </button>
+            <button type="button" disabled={busy} onClick={() => void bulkActive(false)}>
+              <PowerOff size={16} /> Nonaktifkan
+            </button>
           </>
         )}
-        <button type="button" className="btn-sm btn-icon btn-danger" disabled={busy} onClick={() => void bulkRemove()}>
-          <Trash2 size={15} /> Hapus
+        <button type="button" className="danger" disabled={busy} onClick={() => void bulkDelete()}>
+          <Trash2 size={16} /> Hapus
         </button>
-        <button type="button" className="btn-sm btn-ghost" onClick={() => setPicked(new Set())}>Batal</button>
       </BulkBar>
+
+      {detail && (
+        <Drawer
+          title={String(detail[titleKey] ?? '')}
+          subtitle={cap(noun)}
+          onClose={() => setDetail(null)}
+          footer={
+            isAdmin ? (
+              <button type="button" className="btn-icon" onClick={() => { const r = detail; setDetail(null); openEdit(r) }}>
+                <Pencil size={15} /> Ubah
+              </button>
+            ) : undefined
+          }
+        >
+          {imageField && (
+            <div className="dr-hero">
+              {detail[imageField.key] ? <img src={imageUrl(String(detail[imageField.key]))} alt="" /> : <div className="dr-noimg" />}
+              <div className="tags">{badges(detail)}</div>
+            </div>
+          )}
+          <section className="dr-sec">
+            {!imageField && <div className="tags" style={{ marginBottom: 8 }}>{badges(detail)}</div>}
+            {fields
+              .filter((f) => f.type === 'text' || f.type === 'select')
+              .map((f) => (
+                <DetailRow key={f.key} label={f.label}>
+                  {f.type === 'select' ? (f.options?.find((o) => o.value === detail[f.key])?.label ?? '-') : String(detail[f.key] ?? '') || '-'}
+                </DetailRow>
+              ))}
+            {relation && <DetailRow label="Keterkaitan">{relation.render(statOf(detail))}</DetailRow>}
+            <DetailRow label="ID">{String(detail.id)}</DetailRow>
+          </section>
+          {phoneField && String(detail[phoneField.key] ?? '') && (
+            <a className="btn-sm btn-icon cp-wa" href={`https://wa.me/${waNumber(String(detail[phoneField.key]))}`} target="_blank" rel="noopener noreferrer">
+              <MessageCircle size={15} /> Hubungi lewat WhatsApp
+            </a>
+          )}
+        </Drawer>
+      )}
 
       {editing !== null && (
         <Modal title={editing === 'new' ? `Tambah ${noun}` : `Ubah ${noun}`} dirty={formDirty} onClose={() => !busy && closeForm()}>
-          <form noValidate onSubmit={(e) => void save(e)} className="form-stack">
+          <form noValidate onSubmit={save} className="form-stack">
             <small>Tanda <span className="req">*</span> wajib diisi.</small>
             {fields.map((fl) => {
               const label = (
@@ -641,9 +727,9 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
                     {label}
                     <SelectSheet
                       label={fl.label}
-                      emptyLabel="— pilih —"
                       value={String(form[fl.key] ?? '')}
-                      onChange={(v) => setForm({ ...form, [fl.key]: v })}
+                      onChange={(v) => setForm({ ...form, [fl.key]: String(v) })}
+                      placeholder="— pilih —"
                       options={(fl.options ?? []).map((o) => ({ value: String(o.value), label: o.label }))}
                     />
                   </div>
@@ -675,17 +761,31 @@ export default function CrudPage({ title, subtitle, noun, table, fields, relatio
                 <label key={fl.key} className="field">
                   {label}
                   <input placeholder={fl.placeholder} value={String(form[fl.key] ?? '')} onChange={(e) => setForm({ ...form, [fl.key]: e.target.value })} />
-                  {fl.key === titleKey && dupRow && (
-                    <span className="hint" style={{ color: 'var(--warning)' }}>
-                      {cap(noun)} dengan nama ini sudah ada{dupRow.is_active === false ? ' (nonaktif)' : ''}. Gunakan nama lain.
-                    </span>
-                  )}
                 </label>
               )
             })}
+            {exactDupes.length > 0 && (
+              <div className="dup-warn" role="alert">
+                <strong><TriangleAlert size={15} style={{ verticalAlign: '-2px' }} /> {cap(noun)} ini sudah ada</strong>
+                <ul>
+                  {exactDupes.slice(0, 3).map((r) => (
+                    <li key={r.id as number}>{String(r[titleKey] ?? '')}{activeField && !r[activeField.key] ? ' (nonaktif)' : ''}</li>
+                  ))}
+                </ul>
+                <label>
+                  <input type="checkbox" checked={dupAck} onChange={(e) => setDupAck(e.target.checked)} /> Tetap simpan, ini memang berbeda
+                </label>
+              </div>
+            )}
+            {exactDupes.length === 0 && similar.length > 0 && (
+              <div className="dup-warn">
+                <strong>Ada nama yang mirip</strong>
+                <span>{similar.map((r) => String(r[titleKey] ?? '')).join(', ')}. Pastikan bukan data yang sama.</span>
+              </div>
+            )}
             <div className="form-actions">
               <button type="button" onClick={closeForm} disabled={busy}>Batal</button>
-              <button disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
+              <button disabled={busy || submit.locked}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
             </div>
           </form>
         </Modal>

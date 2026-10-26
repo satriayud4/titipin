@@ -8,6 +8,7 @@ import { useAlerts } from '../lib/alerts'
 import { NotificationsMenu, UserMenu } from './HeaderMenus'
 import CommandPalette from './CommandPalette'
 import BrandMark from './BrandMark'
+import '../print.css'
 
 export default function Layout() {
   const { profile } = useAuth()

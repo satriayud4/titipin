@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   Banknote,
   CircleCheck,
@@ -11,6 +11,7 @@ import {
   QrCode,
   Search,
   ShoppingBag,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -27,7 +28,12 @@ import { rupiah } from '../lib/format'
 import { todayWIB } from '../lib/dates'
 import { LOW_STOCK } from '../lib/alerts'
 import { wibTime } from '../lib/promo'
-import { MAX_RUPIAH, isMissingFunction, newKey } from '../lib/limits'
+import { useSubmitLock } from '../lib/useSubmitLock'
+import { isNetworkError, rpcWithTimeout, useRequestKey } from '../lib/idempotency'
+import { checkFreshStock, validateSaleInput } from '../lib/validate'
+import { clearDraft, readDraft, useAutosave, useDraftKey } from '../lib/drafts'
+import { fetchDayStatus, type DayStatus } from '../lib/storeStatus'
+import DraftBanner from '../components/DraftBanner'
 import './Promo.css'
 
 interface Item {
@@ -199,9 +205,12 @@ export default function Pos() {
   const [busy, setBusy] = useState(false)
   const [sheet, setSheet] = useState(false)
   const [done, setDone] = useState<Done | null>(null)
-  // mencegah klik ganda dan transaksi ganda saat koneksi lambat atau kirim ulang setelah timeout
-  const payingRef = useRef(false)
-  const saleKey = useRef<{ sig: string; key: string } | null>(null)
+  const submit = useSubmitLock()
+  const requestKey = useRequestKey()
+  const draftKey = useDraftKey('kasir')
+  const [draftReady, setDraftReady] = useState(false)
+  const [restoredAt, setRestoredAt] = useState<number | null>(null)
+  const [dayStatus, setDayStatus] = useState<DayStatus | null>(null)
 
   const load = useCallback(async () => {
     const today = todayWIB()
@@ -256,6 +265,36 @@ export default function Pos() {
   }, [load])
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.batch_id, i])), [items])
+
+  useEffect(() => {
+    void fetchDayStatus().then(setDayStatus)
+  }, [])
+
+  // pulihkan keranjang yang belum selesai (mis. kasir sempat pindah halaman), disesuaikan dengan stok terbaru
+  useEffect(() => {
+    if (loading || draftReady || !draftKey) return
+    const d = readDraft<{ cart: Record<number, number>; method: Method; cash: string }>(draftKey)
+    if (d) {
+      const next: Record<number, number> = {}
+      for (const [id, q] of Object.entries(d.data.cart ?? {})) {
+        const it = itemById.get(Number(id))
+        if (it && q > 0) next[Number(id)] = Math.min(q, it.qty_remaining)
+      }
+      if (Object.keys(next).length > 0) {
+        setCart(next)
+        if (d.data.method) setMethod(d.data.method)
+        setCash(d.data.cash ?? '')
+        setRestoredAt(d.at)
+      } else clearDraft(draftKey)
+    }
+    setDraftReady(true)
+  }, [loading, draftReady, draftKey, itemById])
+
+  const cartCount = Object.keys(cart).length
+  useAutosave(draftKey, { cart, method, cash }, draftReady && cartCount > 0)
+  useEffect(() => {
+    if (draftReady && cartCount === 0) clearDraft(draftKey)
+  }, [draftReady, cartCount, draftKey])
 
   function add(id: number) {
     const it = itemById.get(id)
@@ -326,62 +365,68 @@ export default function Pos() {
     }
   }
 
-  async function pay() {
-    if (payingRef.current) return
-    payingRef.current = true
-    try {
-      await payInner()
-    } finally {
-      payingRef.current = false
-    }
-  }
+  // Satu klik "Bayar": diperiksa (nominal, stok), dikonfirmasi, lalu dikirim dengan kunci anti-ganda.
+  function pay() {
+    void submit.run(async () => {
+      const saleLines = lines.map((l) => ({ batch_id: l.it.batch_id, name: nameOf(l.it.product_id), qty: l.q, price: l.it.sell_price }))
+      const problems = validateSaleInput(saleLines, method, method === 'tunai' ? (cash.trim() === '' ? null : received) : null, total)
+      if (problems.length > 0) {
+        notify(problems.slice(0, 2).join(' '), 'error')
+        return
+      }
 
-  async function payInner() {
-    if (lines.length === 0) {
-      notify('Keranjang masih kosong.', 'error')
-      return
-    }
-    if (method === 'tunai' && (cash.trim() === '' || received < total)) {
-      notify('Uang diterima kurang dari total belanja.', 'error')
-      return
-    }
-    if (total > MAX_RUPIAH) {
-      notify(`Total belanja terlalu besar (maksimal ${rupiah(MAX_RUPIAH)}). Periksa jumlah barang di keranjang.`, 'error')
-      return
-    }
-    if (method === 'tunai' && received > MAX_RUPIAH) {
-      notify(`Uang diterima terlalu besar (maksimal ${rupiah(MAX_RUPIAH)}). Periksa angka yang diketik.`, 'error')
-      return
-    }
-    setBusy(true)
-    // pastikan harga promo sudah yang terbaru; bila baru saja berubah, kasir diminta memeriksa ulang
-    const sync = await supabase.rpc('promo_sync')
-    if (Number(sync.data) > 0) {
+      setBusy(true)
+      try {
+        // harga promo dan stok dicek ulang ke server; bila ada yang berubah, kasir diminta memeriksa keranjang
+        const sync = await supabase.rpc('promo_sync')
+        const fresh = await checkFreshStock(saleLines)
+        if (Number(sync.data) > 0 || fresh.length > 0) {
+          await load()
+          notify(fresh.length > 0 ? `${fresh.slice(0, 2).join(' ')} Periksa keranjang lalu coba lagi.` : 'Harga promo baru saja berubah. Periksa keranjang lalu coba bayar lagi.', 'error')
+          return
+        }
+      } finally {
+        setBusy(false)
+      }
+
+      const pcs = lines.reduce((n, l) => n + l.q, 0)
+      const ok = await confirm({
+        title: 'Simpan transaksi ini?',
+        message: `${lines.length} jenis barang (${pcs} pcs), total ${rupiah(total)}, metode ${method}${method === 'tunai' ? `, kembalian ${rupiah(received - total)}` : ''}.${
+          dayStatus?.closed ? ` Perhatian: toko ditandai tutup hari ini${dayStatus.note ? ` (${dayStatus.note})` : ''}.` : ''
+        } Transaksi yang sudah disimpan tidak bisa dihapus kasir.`,
+        confirmText: 'Ya, simpan',
+      })
+      if (!ok) return
+
+      setBusy(true)
+      const items = lines.map((l) => ({ batch_id: l.it.batch_id, qty: l.q }))
+      const cashArg = method === 'tunai' ? received : null
+      const reqId = requestKey.get(JSON.stringify({ method, cashArg, items }))
+      let res = await rpcWithTimeout<number>('create_sale_idem', { p_request_id: reqId, p_method: method, p_cash_received: cashArg, p_items: items })
+      // SQL anti-ganda belum dipasang: tetap bisa menjual, hanya tanpa perlindungan server
+      // fungsi anti-ganda belum dipasang atau skemanya belum cocok: transaksi gagal sebelum tersimpan, jadi aman diulang lewat jalur biasa
+      if (res.error && ['PGRST202', '42883', '42703', '42P01'].includes((res.error as { code?: string }).code ?? '')) {
+        res = await rpcWithTimeout<number>('create_sale', { p_method: method, p_cash_received: cashArg, p_items: items })
+      }
       setBusy(false)
+      if (res.error) {
+        if (isNetworkError(res.error)) {
+          notify('Koneksi lambat atau terputus. Transaksi mungkin sudah tersimpan. Tekan Bayar lagi: aman, tidak akan tercatat dua kali. Atau cek dulu di Riwayat Transaksi.', 'error')
+        } else {
+          notify(errText(res.error), 'error')
+          await load() // stok mungkin sudah berubah (dijual kasir lain)
+        }
+        return
+      }
+      requestKey.reset()
+      setDone({ id: Number(res.data), total, change: method === 'tunai' ? received - total : 0, method })
+      setCart({})
+      setCash('')
+      setSheet(false)
+      setRestoredAt(null)
       await load()
-      notify('Harga promo baru saja berubah. Periksa keranjang lalu coba bayar lagi.', 'error')
-      return
-    }
-    // kunci yang sama dipakai selama isi keranjang tidak berubah: kirim ulang setelah timeout tidak membuat transaksi kedua
-    const items = lines.map((l) => ({ batch_id: l.it.batch_id, qty: l.q }))
-    const sig = JSON.stringify([method, items])
-    if (saleKey.current?.sig !== sig) saleKey.current = { sig, key: newKey() }
-    const args = { p_method: method, p_cash_received: method === 'tunai' ? received : null, p_items: items }
-    let res = await supabase.rpc('create_sale_once', { p_client_key: saleKey.current.key, ...args })
-    if (res.error && isMissingFunction(res.error)) res = await supabase.rpc('create_sale', args)
-    const { data, error } = res
-    setBusy(false)
-    if (error) {
-      notify(errText(error), 'error')
-      await load() // stok mungkin sudah berubah (dijual kasir lain)
-      return
-    }
-    saleKey.current = null
-    setDone({ id: Number(data), total, change: method === 'tunai' ? received - total : 0, method })
-    setCart({})
-    setCash('')
-    setSheet(false)
-    await load()
+    })
   }
 
   const quick = [...new Set([total, 20000, 50000, 100000])].filter((n) => n >= total && n > 0)
@@ -483,7 +528,7 @@ export default function Pos() {
         <span>Total</span>
         <strong>{rupiah(total)}</strong>
       </div>
-      <button className="btn-primary pay-btn" onClick={() => void pay()} disabled={busy || lines.length === 0}>
+      <button className="btn-primary pay-btn" onClick={pay} disabled={busy || submit.locked || lines.length === 0}>
         {busy ? 'Memproses…' : `Bayar ${rupiah(total)}`}
       </button>
     </>
@@ -492,6 +537,25 @@ export default function Pos() {
   return (
     <div className="pos" data-cart={prefs.cart} data-cartw={prefs.cartWidth} data-density={prefs.density}>
       <div className="pos-main">
+        {dayStatus?.closed && (
+          <div className="notice notice-warning" style={{ marginBottom: 10 }}>
+            <TriangleAlert size={18} />
+            <span>
+              Toko ditandai <b>tutup</b> hari ini{dayStatus.note ? ` (${dayStatus.note})` : dayStatus.source === 'weekly' ? ' menurut jadwal mingguan' : ''}.
+              Transaksi tetap bisa dicatat, tetapi akan diminta konfirmasi.
+            </span>
+          </div>
+        )}
+        {restoredAt && (
+          <DraftBanner
+            at={restoredAt}
+            onDiscard={() => {
+              setCart({})
+              setCash('')
+              setRestoredAt(null)
+            }}
+          />
+        )}
         <div className="toolbar pos-toolbar" style={{ marginBottom: 0 }}>
           <div className="search" style={{ maxWidth: 'none' }}>
             <Search size={18} />

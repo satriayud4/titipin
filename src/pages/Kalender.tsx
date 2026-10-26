@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast'
 import PageHeader from '../components/PageHeader'
 import DayTimeline from '../components/kalender/DayTimeline'
 import { DayStatusModal, HoursModal, OrderDetailModal, OrderModal } from '../components/kalender/KalenderModals'
+import StoreStatusPanel from '../components/kalender/StoreStatusPanel'
 import { ALERTS_REFRESH_EVENT } from '../lib/alerts'
 import { addDays } from '../lib/dates'
 import { errText } from '../lib/errors'
@@ -123,6 +124,13 @@ export default function Kalender() {
   const reload = useCallback(() => {
     setReloadKey((k) => k + 1)
     window.dispatchEvent(new Event(ALERTS_REFRESH_EVENT))
+  }, [])
+
+  // shift kasir yang lupa ditutup di hari sebelumnya ditutup otomatis, lalu tampilan dimuat ulang
+  useEffect(() => {
+    void supabase.rpc('auto_close_stale_shifts').then(({ data }) => {
+      if (Number(data) > 0) setReloadKey((k) => k + 1)
+    })
   }, [])
 
   // data bulan yang tampil (+ hari ini, bila di luar bulan itu)
@@ -320,6 +328,8 @@ export default function Kalender() {
           </>
         }
       />
+
+      {isAdmin && <StoreStatusPanel onChanged={reload} />}
 
       {/* ===== Hari ini ===== */}
       <section className="card kal-hero" aria-label="Hari ini">

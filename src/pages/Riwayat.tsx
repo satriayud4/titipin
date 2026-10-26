@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import PageHeader from '../components/PageHeader'
 import DateRangePicker from '../components/DateRangePicker'
+import SelectSheet from '../components/SelectSheet'
 import EmptyState from '../components/EmptyState'
 import SaleDetailModal, { trxLabel } from '../components/SaleDetailModal'
 import { errText } from '../lib/errors'
@@ -125,12 +126,19 @@ export default function Riwayat() {
           <Search size={18} />
           <input placeholder="Cari nomor TRX atau kasir…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <select value={method} onChange={(e) => setMethod(e.target.value as '' | Method)} aria-label="Filter metode pembayaran">
-          <option value="">Semua metode</option>
-          <option value="tunai">Tunai</option>
-          <option value="transfer">Transfer</option>
-          <option value="qris">QRIS</option>
-        </select>
+        <div style={{ minWidth: 170 }}>
+          <SelectSheet
+            label="Metode pembayaran"
+            value={method}
+            onChange={(v) => setMethod(String(v) as '' | Method)}
+            options={[
+              { value: '', label: 'Semua metode' },
+              { value: 'tunai', label: 'Tunai' },
+              { value: 'transfer', label: 'Transfer' },
+              { value: 'qris', label: 'QRIS' },
+            ]}
+          />
+        </div>
         <div className="pills">
           {statusPills.map((p) => (
             <button key={p.key} type="button" className={`pill${status === p.key ? ' on' : ''}`} onClick={() => setStatus(p.key)}>

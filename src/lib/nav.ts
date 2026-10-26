@@ -1,6 +1,7 @@
 import {
   BadgePercent,
   Boxes,
+  History,
   ChartColumn,
   CreditCard,
   HandCoins,
@@ -76,6 +77,7 @@ export const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Admin',
     items: [
       { to: '/pembayaran', label: 'Pembayaran', icon: CreditCard, roles: ['admin'] },
+      { to: '/audit', label: 'Riwayat Perubahan', icon: History, roles: ['admin'] },
       { to: '/pengguna', label: 'Pengguna', icon: Users, superOnly: true },
       { to: '/pengaturan', label: 'Pengaturan Toko', icon: Settings, superOnly: true },
     ],

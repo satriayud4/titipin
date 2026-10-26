@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Banknote, Landmark, Minus, Plus, QrCode, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { Banknote, Landmark, Minus, Plus, Printer, QrCode, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from './Toast'
 import { useConfirm } from './ConfirmDialog'
 import Modal from './Modal'
 import { errText } from '../lib/errors'
 import { rupiah } from '../lib/format'
+import { printPage } from '../lib/print'
+import { useStore } from '../store/StoreContext'
 
 type Method = 'tunai' | 'transfer' | 'qris'
 const METHODS: { value: Method; label: string; icon: LucideIcon }[] = [
@@ -60,6 +62,7 @@ interface Props {
 }
 
 export default function SaleDetailModal({ saleId, onClose, onChanged }: Props) {
+  const store = useStore()
   const notify = useToast()
   const confirm = useConfirm()
   const [sale, setSale] = useState<SaleDetail | null>(null)
@@ -192,11 +195,15 @@ export default function SaleDetailModal({ saleId, onClose, onChanged }: Props) {
     mode === 'view' ? (
       sale.can_edit && !sale.voided ? (
         <>
+          <button type="button" className="btn-icon" onClick={() => printPage('receipt')}><Printer size={16} /> Cetak struk</button>
           <button className="btn-danger" onClick={() => { setReason(''); setMode('void') }}>Batalkan transaksi</button>
           <button className="btn-primary" onClick={startEdit}>Ubah transaksi</button>
         </>
       ) : (
-        <button onClick={onClose}>Tutup</button>
+        <>
+          <button type="button" className="btn-icon" onClick={() => printPage('receipt')}><Printer size={16} /> Cetak struk</button>
+          <button onClick={onClose}>Tutup</button>
+        </>
       )
     ) : mode === 'edit' ? (
       <>
@@ -214,6 +221,11 @@ export default function SaleDetailModal({ saleId, onClose, onChanged }: Props) {
     <Modal title={`${trxLabel(sale.id)}${mode === 'edit' ? ' · Ubah' : mode === 'void' ? ' · Batalkan' : ''}`} onClose={() => !busy && onClose()} footer={footer}>
       {mode === 'view' && (
         <div className="form-stack">
+          <div className="print-only" style={{ textAlign: 'center', marginBottom: 8 }}>
+            <b style={{ fontSize: '1.1em' }}>{store.name}</b>
+            <div>Bukti transaksi {trxLabel(sale.id)}</div>
+            <div style={{ borderBottom: '1px dashed #000', marginTop: 6 }} />
+          </div>
           {sale.voided && (
             <div className="notice notice-error">
               <TriangleAlert size={18} />

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Banknote, CalendarClock, Check, ChevronDown, Hourglass, Info, Percent, Search, Sparkles, TriangleAlert, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
@@ -13,6 +14,8 @@ import { rupiah } from '../lib/format'
 import { addDays, todayWIB } from '../lib/dates'
 import { imageUrl } from '../lib/image'
 import { ALERTS_REFRESH_EVENT } from '../lib/alerts'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
+import { useSubmitLock } from '../lib/useSubmitLock'
 import {
   PROMO_V2_SQL_FILE,
   SHARE_OPTIONS,
@@ -132,6 +135,8 @@ export default function Promo() {
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin' || !!profile?.is_superadmin
   const today = todayWIB()
+  const [params] = useSearchParams()
+  const preselected = useRef(false)
 
   const [batches, setBatches] = useState<BatchRow[]>([])
   const [products, setProducts] = useState<Map<number, { name: string; image_path: string | null }>>(new Map())
@@ -159,6 +164,7 @@ export default function Promo() {
   const [share, setShare] = useState(0)
   const [name, setName] = useState(`Promo ${shortDate(today)}`)
   const [note, setNote] = useState('')
+  useUnsavedGuard(isAdmin && (picked.size > 0 || note.trim() !== ''))
 
   const load = useCallback(
     async (silent = false) => {
@@ -230,6 +236,19 @@ export default function Promo() {
     }
     return s
   }, [campaigns])
+
+  // dari halaman Stok ("Promokan"): barang yang dipilih langsung tercentang
+  useEffect(() => {
+    const raw = params.get('batch')
+    if (loading || preselected.current || !raw) return
+    preselected.current = true
+    const ids = new Set(raw.split(',').map(Number).filter(Boolean))
+    const valid = batches.filter((b) => ids.has(b.batch_id) && !onPromo.has(b.batch_id)).map((b) => b.batch_id)
+    if (valid.length > 0) {
+      setScope('all')
+      setPicked(new Set(valid))
+    }
+  }, [loading, params, batches, onPromo])
 
   const limit = addDays(today, expDays)
   const q = search.trim().toLowerCase()
@@ -321,8 +340,13 @@ export default function Promo() {
     }
   }
 
-  async function start(e: FormEvent) {
+  const lock = useSubmitLock()
+  function start(e: FormEvent) {
     e.preventDefault()
+    void lock.run(() => doStart())
+  }
+
+  async function doStart() {
     if (pickedRows.length === 0) return notify('Pilih minimal satu barang untuk dipromokan.', 'error')
     if (!valueOk) return notify(type === 'percent' ? 'Diskon harus angka bulat antara 1 sampai 90.' : 'Potongan harus angka bulat lebih dari 0.', 'error')
     if (timeError) return notify(timeError, 'error')
@@ -431,7 +455,7 @@ export default function Promo() {
           </div>
 
           {isAdmin ? (
-            <form noValidate onSubmit={(ev) => void start(ev)} className="pm-layout">
+            <form noValidate onSubmit={start} className="pm-layout">
               <div className="pm-steps">
                 <Step n={1} title="Pilih barang" sub="Barang yang masih ada stok dan belum expired.">
                   <div className="pm-row">

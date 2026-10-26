@@ -7,11 +7,14 @@ import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import NewProductModal from '../components/NewProductModal'
 import DatePicker from '../components/DatePicker'
+import DraftBanner from '../components/DraftBanner'
+import { useSubmitLock } from '../lib/useSubmitLock'
+import { isNetworkError, rpcWithTimeout, useRequestKey } from '../lib/idempotency'
+import { clearDraft, readDraft, useAutosave, useDraftKey } from '../lib/drafts'
 import ViewOptions, { type OptionGroup } from '../components/ViewOptions'
 import SupplierPicker from '../components/SupplierPicker'
 import { useStoredState } from '../lib/prefs'
 import { todayWIB } from '../lib/dates'
-import { MAX_QTY, MAX_RUPIAH } from '../lib/limits'
 import CartDock from '../components/CartDock'
 import { errText } from '../lib/errors'
 import { imageUrl } from '../lib/image'
@@ -87,6 +90,11 @@ export default function StockIntake() {
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [busy, setBusy] = useState(false)
   const [recent, setRecent] = useState<Map<number, { rank: number; products: number }>>(new Map())
+  const submit = useSubmitLock()
+  const requestKey = useRequestKey()
+  const draftKey = useDraftKey('barang-masuk')
+  const [draftReady, setDraftReady] = useState(false)
+  const [restoredAt, setRestoredAt] = useState<number | null>(null)
   const [prefs, setPrefs, resetPrefs] = useStoredState('titipin:barangmasuk:tampilan:v1', VIEW_DEFAULTS)
 
   const loadLists = useCallback(async () => {
@@ -176,6 +184,22 @@ export default function StockIntake() {
     }
   }, [supplierId])
 
+  // pulihkan isian yang belum disimpan (mis. sempat pindah halaman atau browser tertutup)
+  useEffect(() => {
+    if (draftReady || !draftKey) return
+    const d = readDraft<Record<string, Entry[]>>(draftKey)
+    if (d && Object.values(d.data).some((l) => l.length > 0)) {
+      setDrafts(d.data)
+      setRestoredAt(d.at)
+    }
+    setDraftReady(true)
+  }, [draftReady, draftKey])
+  const hasDraft = Object.values(drafts).some((l) => l.length > 0)
+  useAutosave(draftKey, drafts, draftReady && hasDraft)
+  useEffect(() => {
+    if (draftReady && !hasDraft) clearDraft(draftKey)
+  }, [draftReady, hasDraft, draftKey])
+
   const entries = drafts[supplierId] ?? []
   const setEntries = (next: Entry[] | ((es: Entry[]) => Entry[])) =>
     setDrafts((d) => ({ ...d, [supplierId]: typeof next === 'function' ? next(d[supplierId] ?? []) : next }))
@@ -257,8 +281,8 @@ export default function StockIntake() {
       if (e.qty.trim() === '' || !Number.isInteger(qty) || qty <= 0) return `${nm}: stok wajib diisi dan harus lebih dari 0.`
       if (e.cost.trim() === '' || !Number.isInteger(cost) || cost < 0) return `${nm}: harga supplier wajib diisi (angka bulat, minimal 0).`
       if (e.sell.trim() === '' || !Number.isInteger(sell) || sell < 0) return `${nm}: harga jual wajib diisi (angka bulat, minimal 0).`
-      if (qty > MAX_QTY) return `${nm}: stok terlalu besar (maksimal ${MAX_QTY.toLocaleString('id-ID')}). Periksa angka yang diketik.`
-      if (cost > MAX_RUPIAH || sell > MAX_RUPIAH) return `${nm}: harga terlalu besar (maksimal Rp${MAX_RUPIAH.toLocaleString('id-ID')}). Periksa angka yang diketik.`
+      if (qty > 100000) return `${nm}: jumlah stok terlalu besar. Periksa kembali angkanya.`
+      if (cost > 100000000 || sell > 100000000) return `${nm}: nominal harga terlalu besar. Periksa kembali angkanya.`
       if (e.expired === '') return `${nm}: tanggal expired wajib diisi.`
       if (e.expired < todayWIB()) return `${nm}: tanggal expired sudah lewat.`
     }
@@ -266,7 +290,11 @@ export default function StockIntake() {
   }
 
   /** Simpan isian satu supplier, atau semua supplier yang sudah ada isiannya. */
-  async function saveAll(only?: string) {
+  function saveAll(only?: string) {
+    void submit.run(() => doSaveAll(only))
+  }
+
+  async function doSaveAll(only?: string) {
     const sids = only ? [only] : Object.keys(drafts).filter((k) => activeOf(drafts[k] ?? []).length > 0)
     if (sids.length === 0) {
       notify('Belum ada barang yang diisi.', 'error')
@@ -306,11 +334,23 @@ export default function StockIntake() {
           ? [{ name: pr.name, category: catName.get(pr.category_id ?? -1) ?? '', unit: pr.unit ?? 'pcs', qty: Number(e.qty), cost_price: Number(e.cost), sell_price: Number(e.sell), expired_date: e.expired, image_path: null }]
           : []
       })
-      const { error } = await supabase.rpc('add_stock_batches', { p_supplier_id: Number(sid), p_items: items })
+      // kunci anti-ganda: kirim ulang isian yang sama (timeout, koneksi putus) tidak mencatat stok dua kali
+      const reqId = requestKey.get(JSON.stringify({ sid, items }))
+      let res = await rpcWithTimeout('add_stock_batches_idem', { p_request_id: reqId, p_supplier_id: Number(sid), p_items: items })
+      if (res.error && ['PGRST202', '42883', '42703', '42P01'].includes((res.error as { code?: string }).code ?? '')) {
+        res = await rpcWithTimeout('add_stock_batches', { p_supplier_id: Number(sid), p_items: items }) // SQL anti-ganda belum dipasang
+      }
+      const error = res.error
       if (error) {
-        notify(`${supplierLabel(sid)}: ${errText(error)}`, 'error')
+        notify(
+          isNetworkError(error)
+            ? `${supplierLabel(sid)}: koneksi lambat atau terputus. Data mungkin sudah tersimpan. Tekan Simpan lagi: aman, tidak akan tercatat dua kali.`
+            : `${supplierLabel(sid)}: ${errText(error)}`,
+          'error',
+        )
         break
       }
+      requestKey.reset()
       done.push(sid)
       count += items.length
     }
@@ -540,7 +580,7 @@ export default function StockIntake() {
           <span style={{ color: totals.sell - totals.cost < 0 ? 'var(--danger)' : 'var(--success)' }}>{rupiah(totals.sell - totals.cost)}</span>
         </div>
       </div>
-      <button className="btn-primary pay-btn" onClick={() => void saveAll(supplierId)} disabled={busy || entries.length === 0}>
+      <button className="btn-primary pay-btn" onClick={() => saveAll(supplierId)} disabled={busy || submit.locked || entries.length === 0}>
         {busy ? 'Menyimpan…' : 'Simpan barang masuk'}
       </button>
     </>
@@ -549,6 +589,17 @@ export default function StockIntake() {
   return (
     <div>
       <PageHeader title="Barang Masuk" subtitle="Pilih supplier, pilih produk yang dititip, lalu isi stok dan harga." />
+
+      {restoredAt && (
+        <DraftBanner
+          at={restoredAt}
+          onDiscard={() => {
+            setDrafts({})
+            setRestoredAt(null)
+            clearDraft(draftKey)
+          }}
+        />
+      )}
 
       {!loading && rail.length > 0 && (
         <SupplierPicker
@@ -667,7 +718,7 @@ export default function StockIntake() {
               dari {all.products} produk · {draftSids.length === 1 ? supplierLabel(draftSids[0]) : `${draftSids.length} supplier`}
             </span>
           </div>
-          <button type="button" className="btn-primary" onClick={() => void saveAll()} disabled={busy}>
+          <button type="button" className="btn-primary" onClick={() => saveAll()} disabled={busy || submit.locked}>
             {busy ? 'Menyimpan…' : draftSids.length > 1 ? `Simpan semua (${draftSids.length} supplier)` : 'Simpan barang masuk'}
           </button>
         </div>

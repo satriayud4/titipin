@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Camera, ImagePlus, RefreshCw, Store, Upload } from 'lucide-react'
+import { Camera, ImagePlus, RefreshCw, Store, TriangleAlert, Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { imageUrl, removeImage, uploadProductImage } from '../lib/image'
 import { useToast } from './Toast'
 import Modal from './Modal'
 import { errText } from '../lib/errors'
+import { useSubmitLock } from '../lib/useSubmitLock'
 import './NewProductModal.css'
 
 export interface EditableProduct {
@@ -39,29 +40,51 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
   const [preview, setPreview] = useState<string | null>(null)
   const [drag, setDrag] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [siblings, setSiblings] = useState<{ id: number; name: string }[]>([])
   const previewRef = useRef<string | null>(null)
+  const submit = useSubmitLock()
+  const initial = useRef({ name: product?.name ?? '', category: '', unit: product?.unit ?? 'pcs' })
+  const [similar, setSimilar] = useState<{ id: number; name: string; supplier_id: number | null; is_active: boolean | null }[]>([])
+  const [dupAck, setDupAck] = useState(false)
   previewRef.current = preview
 
   useEffect(() => () => {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current)
   }, [])
 
-  // nama barang yang sudah dimiliki supplier ini, untuk peringatan duplikat
   useEffect(() => {
-    if (!supplierId) return
+    initial.current.category = categories.find((c) => c.id === product?.category_id)?.name ?? ''
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // cek nama kembar ke database (tidak hanya yang sudah dimuat di layar), tertunda 350 ms saat mengetik
+  useEffect(() => {
+    const n = name.trim()
+    if (n.length < 3) {
+      setSimilar([])
+      return
+    }
     let cancelled = false
-    void supabase
-      .from('products')
-      .select('id, name')
-      .eq('supplier_id', supplierId)
-      .then(({ data }) => {
-        if (!cancelled) setSiblings((data ?? []) as { id: number; name: string }[])
-      })
+    const t = window.setTimeout(() => {
+      const esc = n.replace(/[\\%_]/g, (m) => `\\${m}`)
+      void supabase
+        .from('products')
+        .select('id, name, supplier_id, is_active')
+        .ilike('name', `%${esc}%`)
+        .limit(8)
+        .then(({ data }) => {
+          if (!cancelled) setSimilar(((data ?? []) as typeof similar).filter((p) => p.id !== product?.id))
+        })
+    }, 350)
     return () => {
       cancelled = true
+      window.clearTimeout(t)
     }
-  }, [supplierId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name])
+
+  const exact = similar.filter((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase())
+  const near = similar.filter((p) => p.name.trim().toLowerCase() !== name.trim().toLowerCase()).slice(0, 3)
+  const dirty = name !== initial.current.name || category !== initial.current.category || unit !== initial.current.unit || !!file
 
   function pick(f: File | null) {
     if (!f) return
@@ -87,14 +110,14 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
   }, [categories, category])
   const catIsNew = category.trim() !== '' && !categories.some((c) => c.name.toLowerCase() === category.trim().toLowerCase())
 
-  const dup = siblings.find((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase() && s.id !== product?.id)
-  const initialCategory = categories.find((c) => c.id === product?.category_id)?.name ?? ''
-  const dirty = name !== (product?.name ?? '') || category !== initialCategory || unit !== (product?.unit ?? 'pcs') || file !== null
-
-  async function save(e: FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault()
+    void submit.run(doSave)
+  }
+
+  async function doSave() {
     if (name.trim() === '') return notify('Nama produk wajib diisi.', 'error')
-    if (dup) return notify(`Barang "${dup.name}" sudah ada${supplierName ? ` untuk ${supplierName}` : ''}. Pilih barang itu di daftar, atau gunakan nama lain.`, 'error')
+    if (exact.length > 0 && !dupAck) return notify('Produk dengan nama yang sama sudah ada. Centang "Tetap simpan" bila memang berbeda.', 'error')
     if (category.trim() === '') return notify('Kategori wajib diisi.', 'error')
     if (unit.trim() === '') return notify('Satuan wajib diisi.', 'error')
     if (!editing && !file) return notify('Gambar produk wajib diunggah. Ambil foto atau pilih gambar terlebih dahulu.', 'error')
@@ -143,17 +166,17 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
 
   return (
     <Modal
-      dirty={dirty}
       title={editing ? 'Ubah produk' : 'Produk baru'}
+      dirty={dirty}
       onClose={() => !busy && onClose()}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}>Batal</button>
-          <button type="submit" form="np-form" className="btn-primary" disabled={busy}>{busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan produk'}</button>
+          <button type="submit" form="np-form" className="btn-primary" disabled={busy || submit.locked}>{busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan produk'}</button>
         </>
       }
     >
-      <form id="np-form" noValidate onSubmit={(e) => void save(e)} className="np-form">
+      <form id="np-form" noValidate onSubmit={save} className="np-form">
         {!editing && supplierName && (
           <div className="np-owner">
             <Store size={16} />
@@ -192,13 +215,27 @@ export default function NewProductModal({ supplierId, supplierName, categories, 
 
         <label className="field">
           <span>Nama produk <span className="req">*</span></span>
-          <input value={name} placeholder="Contoh: Keripik Singkong Pedas" autoFocus onChange={(e) => setName(e.target.value)} />
-          {dup && (
-            <span className="hint" style={{ color: 'var(--warning)' }}>
-              Barang ini sudah ada{supplierName ? ` untuk ${supplierName}` : ''}. Pilih dari daftar barang, atau gunakan nama lain.
-            </span>
-          )}
+          <input value={name} placeholder="Contoh: Keripik Singkong Pedas" autoFocus onChange={(e) => { setName(e.target.value); setDupAck(false) }} />
         </label>
+        {exact.length > 0 && (
+          <div className="dup-warn" role="alert">
+            <strong><TriangleAlert size={15} style={{ verticalAlign: '-2px' }} /> Produk ini sudah ada</strong>
+            <ul>
+              {exact.map((p) => (
+                <li key={p.id}>{p.name}{p.is_active === false ? ' (nonaktif)' : ''}</li>
+              ))}
+            </ul>
+            <label>
+              <input type="checkbox" checked={dupAck} onChange={(e) => setDupAck(e.target.checked)} /> Tetap simpan, ini produk yang berbeda
+            </label>
+          </div>
+        )}
+        {exact.length === 0 && near.length > 0 && (
+          <div className="dup-warn">
+            <strong>Ada produk bernama mirip</strong>
+            <span>{near.map((p) => p.name).join(', ')}. Pastikan bukan produk yang sama.</span>
+          </div>
+        )}
 
         <div className="field">
           <span>Kategori <span className="req">*</span></span>

@@ -137,15 +137,24 @@ export default function Kasir() {
 
   const loadShift = useCallback(async () => {
     if (!userId) return
-    const { data, error } = await supabase
-      .from('shifts')
-      .select('id, opened_at, opening_cash')
-      .eq('cashier_id', userId)
-      .is('closed_at', null)
-      .maybeSingle()
+    const fetchOpen = () =>
+      supabase.from('shifts').select('id, opened_at, opening_cash').eq('cashier_id', userId).is('closed_at', null).maybeSingle()
+    let { data, error } = await fetchOpen()
     if (error) {
       notify(errText(error), 'error')
       return
+    }
+    // shift yang dibuka di hari sebelumnya dan lupa ditutup: ditutup otomatis, kasir tinggal membuka shift baru
+    if (data && dayWIB((data as Shift).opened_at) !== todayWIB()) {
+      const auto = await supabase.rpc('auto_close_stale_shifts')
+      if (!auto.error && Number(auto.data) > 0) {
+        notify('Shift hari sebelumnya lupa ditutup, jadi ditutup otomatis (kas dianggap sesuai). Silakan buka shift baru.')
+        ;({ data, error } = await fetchOpen())
+        if (error) {
+          notify(errText(error), 'error')
+          return
+        }
+      }
     }
     setShift((data as Shift | null) ?? null)
   }, [userId, notify])
