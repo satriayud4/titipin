@@ -8,6 +8,7 @@ import { useAlerts } from '../lib/alerts'
 import { NotificationsMenu, UserMenu } from './HeaderMenus'
 import CommandPalette from './CommandPalette'
 import BrandMark from './BrandMark'
+import AiAssistant from './AiAssistant'
 import '../print.css'
 
 export default function Layout() {
@@ -86,6 +87,7 @@ export default function Layout() {
             <span className="kbd">Ctrl K</span>
           </button>
           <span className="spacer" />
+          <AiAssistant />
           <NotificationsMenu alerts={alerts} />
           <UserMenu />
         </header>

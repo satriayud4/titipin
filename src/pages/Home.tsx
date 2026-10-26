@@ -11,6 +11,7 @@ import {
   HandCoins,
   Info,
   ShoppingBag,
+  Sparkles,
   TrendingUp,
   TriangleAlert,
   Wallet,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useToast } from '../components/Toast'
+import { useStore } from '../store/StoreContext'
 import SalesChart from '../components/SalesChart'
 import { ShopScene } from '../components/Illustration'
 import { supabase } from '../lib/supabase'
@@ -28,7 +30,10 @@ import { imageUrl } from '../lib/image'
 import { fetchReport, profit, type DayRow, type ProductRow } from '../lib/report'
 import { LOW_STOCK, type AlertItem } from '../lib/alerts'
 import { fetchDayStatus, type DayStatus } from '../lib/storeStatus'
+import { openAssistant, useAiGreeting } from '../lib/ai'
+import { aiIcon } from '../lib/aiIcons'
 import SaleDetailModal from '../components/SaleDetailModal'
+import '../components/AiAssistant.css'
 import './Home.css'
 
 type Tone = 'green' | 'purple' | 'orange' | 'blue' | 'red'
@@ -120,6 +125,7 @@ function settleBadge(r: SettleRow) {
 export default function Home() {
   const { profile } = useAuth()
   const notify = useToast()
+  const store = useStore()
   const { alerts } = useOutletContext<{ alerts: AlertItem[] }>()
 
   const [loading, setLoading] = useState(true)
@@ -133,6 +139,9 @@ export default function Home() {
   const [dayStatus, setDayStatus] = useState<DayStatus | null>(null)
   const [openSale, setOpenSale] = useState<number | null>(null)
   const [tick, setTick] = useState(0)
+  // kata-kata dan ikon sapaan dari AI; dimuat setelah data dashboard selesai agar tidak berebut
+  const { greeting, loading: greetLoading } = useAiGreeting(profile?.id, store.name, !loading)
+  const GreetIcon = aiIcon(greeting?.ikon)
 
   useEffect(() => {
     let cancelled = false
@@ -299,14 +308,34 @@ export default function Home() {
         <div className="side" style={{ gridArea: 'side' }}>
           <section className="panel hero">
             <ShopScene />
-            <h3>{closedQuiet ? 'Selamat beristirahat!' : 'Semangat hari ini!'}</h3>
-            <div className="panel-sub">
-              {closedQuiet
-                ? 'Toko tutup hari ini. Pakai waktunya untuk istirahat dan menyiapkan stok berikutnya.'
-                : better
-                  ? 'Penjualan hari ini lebih tinggi dari kemarin. Pertahankan!'
-                  : 'Setiap kue yang terjual adalah langkah kecil menuju mimpi besar.'}
-            </div>
+            {greeting ? (
+              <>
+                <div className="hero-ai">
+                  <span className="hero-ico" aria-hidden="true"><GreetIcon size={19} /></span>
+                  <h3>{greeting.judul}</h3>
+                </div>
+                <div className="panel-sub">{greeting.pesan}</div>
+              </>
+            ) : greetLoading ? (
+              <>
+                <div className="skeleton" style={{ height: 20, width: '55%', marginBottom: 8 }} />
+                <div className="skeleton" style={{ height: 13, width: '90%' }} />
+              </>
+            ) : (
+              <>
+                <h3>{closedQuiet ? 'Selamat beristirahat!' : 'Semangat hari ini!'}</h3>
+                <div className="panel-sub">
+                  {closedQuiet
+                    ? 'Toko tutup hari ini. Pakai waktunya untuk istirahat dan menyiapkan stok berikutnya.'
+                    : better
+                      ? 'Penjualan hari ini lebih tinggi dari kemarin. Pertahankan!'
+                      : 'Setiap kue yang terjual adalah langkah kecil menuju mimpi besar.'}
+                </div>
+              </>
+            )}
+            <button type="button" className="btn btn-sm hero-ask" onClick={() => openAssistant()}>
+              <Sparkles size={15} /> Tanya asisten
+            </button>
           </section>
 
           <section className="panel">
