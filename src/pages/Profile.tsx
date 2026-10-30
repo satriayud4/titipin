@@ -1,4 +1,5 @@
 
+import Credit from '../components/Credit'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CircleAlert,
@@ -545,6 +546,7 @@ async function handleUsernameSubmit(e: FormEvent<HTMLFormElement>) {
   </button>
 </form>
       </section>
+      <Credit />
     </div>
   )
 }

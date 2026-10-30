@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { APP_BRAND, APP_BRAND_TAGLINE } from '../brand'
 import BrandMark from './BrandMark'
+import Credit from './Credit'
 import { ShopScene } from './Illustration'
 import ThemeToggle from './ThemeToggle'
 
@@ -29,6 +30,7 @@ export default function AuthShell({ title, subtitle, children, footer }: Props) 
           {children}
           {footer && <p className="auth-foot">{footer}</p>}
         </div>
+        <Credit className="credit-auth" />
       </div>
       <div className="auth-art">
         <div>

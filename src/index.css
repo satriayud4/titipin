@@ -1287,3 +1287,8 @@ input[type='file'] { width: 100%; min-width: 0; }
   font-weight: 600; font-size: 0.95rem; cursor: pointer;
 }
 .upload-actions .btn:hover { background: var(--surface-2); border-color: var(--primary); }
+
+/* Pencantuman pembuat */
+.credit { margin: 24px 0 8px; text-align: center; font-size: 0.8rem; color: var(--muted); }
+.credit strong { color: var(--text); font-weight: 600; }
+.credit-auth { margin: 16px 0 0; }
